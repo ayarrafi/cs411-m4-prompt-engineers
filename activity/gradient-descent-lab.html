@@ -1,0 +1,812 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Gradient Descent Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: lab bench — step card (explore / theory / missions / transfer) on the left, loss landscape + controls on the right; stacks on phones */
+:root{
+  --bg:#EEF2F1; --surface:#FBFCFC; --ink:#14202A; --muted:#566670; --line:#CFD8D9; --grid:#E2E8E8;
+  --accent:#2952CC; --accent-soft:#DCE4FA; --on-accent:#FFFFFF;
+  --grad:#B86A0A; --good:#1E7A4F; --good-soft:#DDF0E5; --bad:#B3392F; --bad-soft:#F6DFDC; --warn:#8A5F00; --warn-soft:#F5EBCF;
+  --font-display:"Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F171C; --surface:#16222A; --ink:#E4ECEE; --muted:#93A3AB; --line:#2A3943; --grid:#1D2A32;
+  --accent:#86A4FF; --accent-soft:#1E2B52; --on-accent:#0B1530;
+  --grad:#F0A33C; --good:#5CC48E; --good-soft:#163A28; --bad:#F07F72; --bad-soft:#40211D; --warn:#E3B64A; --warn-soft:#3A2F12;
+  color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#0F171C; --surface:#16222A; --ink:#E4ECEE; --muted:#93A3AB; --line:#2A3943; --grid:#1D2A32;
+  --accent:#86A4FF; --accent-soft:#1E2B52; --on-accent:#0B1530;
+  --grad:#F0A33C; --good:#5CC48E; --good-soft:#163A28; --bad:#F07F72; --bad-soft:#40211D; --warn:#E3B64A; --warn-soft:#3A2F12;
+  color-scheme:dark; }
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:16px; line-height:1.5; padding-inline:16px; padding-block:20px 40px}
+.wrap{max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:18px}
+h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0; line-height:1.15}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px 24px}
+.brand h1{font-size:clamp(26px,4vw,34px); font-weight:700; letter-spacing:-.01em}
+.brand p{margin:4px 0 0; color:var(--muted); max-width:62ch}
+.cond{display:flex; flex-direction:column; gap:4px; align-items:flex-start}
+.label{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:999px; padding:3px; background:var(--surface)}
+.seg button{border:0; background:transparent; padding:6px 14px; border-radius:999px; cursor:pointer; font-size:14px; color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--bg)}
+
+details.goals{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:10px 16px}
+details.goals summary{cursor:pointer; font-weight:600}
+details.goals ol{margin:8px 0 4px; padding-left:22px; display:flex; flex-direction:column; gap:4px; max-width:80ch}
+
+.track{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:flex-start}
+.stage{display:flex; flex-direction:column; gap:4px}
+.stage .sname{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.stage.cur .sname{color:var(--accent)}
+.pips{display:flex; gap:5px}
+.pip{min-width:30px; height:26px; padding:0 7px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-family:var(--font-mono); font-size:12px; display:inline-flex; align-items:center; justify-content:center; color:var(--muted)}
+.pip.cur{border-color:var(--accent); color:var(--accent); font-weight:600}
+.pip.done{background:var(--good-soft); border-color:transparent; color:var(--good)}
+
+.bench{display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:18px; align-items:start}
+@media (max-width:880px){ .bench{grid-template-columns:minmax(0,1fr)} .plotcol{order:-1} }
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:18px; display:flex; flex-direction:column; gap:14px; min-width:0}
+.eyerow{display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap}
+.eyebrow{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); font-weight:600}
+.clock{font-family:var(--font-mono); font-size:12px; color:var(--muted)}
+.mtitle{font-size:24px; font-weight:600}
+.brief{margin:0; max-width:62ch}
+.fnline{font-family:var(--font-mono); font-size:14px; background:var(--bg); border-radius:6px; padding:6px 10px; align-self:flex-start; max-width:100%; overflow-x:auto; white-space:nowrap}
+.tries{margin:0; padding-left:20px; display:flex; flex-direction:column; gap:3px; color:var(--muted); font-size:15px}
+
+.cycle{display:flex; gap:4px; flex-wrap:wrap}
+.cycle span{font-size:12px; padding:3px 10px; border-radius:999px; background:var(--bg); color:var(--muted); font-weight:600; letter-spacing:.03em}
+.cycle span.on{background:var(--accent); color:var(--on-accent)}
+.cycle span.past{background:var(--accent-soft); color:var(--accent)}
+
+.q{display:flex; flex-direction:column; gap:8px}
+.q .prompt{font-weight:600}
+.q .qnum{font-family:var(--font-mono); color:var(--accent); margin-right:6px}
+.opt{display:flex; gap:10px; align-items:flex-start; padding:8px 12px; border:1px solid var(--line); border-radius:8px; cursor:pointer; background:var(--surface)}
+.opt:hover{border-color:var(--accent)}
+.opt input{margin-top:4px; accent-color:var(--accent)}
+.opt.sel{border-color:var(--accent); background:var(--accent-soft)}
+.opt.dis{cursor:default}
+.opt.right{border-color:var(--good); background:var(--good-soft)}
+.opt.wrongsel{border-color:var(--bad); background:var(--bad-soft)}
+.numrow{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+input[type="number"],textarea,input[type="text"]{border:1px solid var(--line); border-radius:8px; background:var(--bg); padding:8px 10px}
+input[type="number"]{width:9ch; font-family:var(--font-mono)}
+textarea{width:100%; min-height:72px; resize:vertical}
+.why{width:100%}
+
+.btns{display:flex; gap:8px; flex-wrap:wrap}
+.btn{border:1px solid var(--accent); background:var(--accent); color:var(--on-accent); padding:9px 16px; border-radius:8px; cursor:pointer; font-weight:600}
+.btn.ghost{background:transparent; color:var(--accent)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.hintline{font-size:13px; color:var(--muted); margin:0}
+
+.outcome{display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; padding:12px; border-radius:8px; border:1px solid var(--line); font-size:15px}
+.outcome.ok{background:var(--good-soft); border-color:transparent}
+.outcome.no{background:var(--bad-soft); border-color:transparent}
+.outcome.neutral{background:var(--bg); border-color:transparent}
+.outcome .k{color:var(--muted); font-size:13px; padding-top:1px}
+.verdict{grid-column:1/-1; font-weight:700; font-family:var(--font-display)}
+.outcome.ok .verdict{color:var(--good)} .outcome.no .verdict{color:var(--bad)}
+
+.runs{display:flex; flex-direction:column; gap:4px; font-size:14px}
+.runs .r{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.chip{font-size:12px; font-weight:600; padding:1px 8px; border-radius:999px; background:var(--bg); color:var(--muted)}
+.chip.global{background:var(--good-soft); color:var(--good)}
+.chip.diverge,.chip.local{background:var(--bad-soft); color:var(--bad)}
+.chip.oscillate,.chip.slow{background:var(--warn-soft); color:var(--warn)}
+
+.tutor{display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--line); padding-top:12px}
+.tutor-head{display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap}
+.badge{font-size:11px; letter-spacing:.06em; text-transform:uppercase; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--bg); color:var(--muted)}
+.thread{display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto}
+.msg{padding:9px 12px; border-radius:8px; max-width:95%; white-space:pre-wrap; overflow-wrap:anywhere}
+.msg.t{background:var(--bg); align-self:flex-start; border-left:3px solid var(--grad)}
+.msg.s{background:var(--accent-soft); align-self:flex-end}
+.msg .who{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:2px}
+.msg.thinking{color:var(--muted); font-style:italic}
+.reply{display:flex; gap:8px; flex-wrap:wrap}
+.reply input{flex:1; min-width:10ch}
+.note{font-size:13px; color:var(--warn); background:var(--warn-soft); padding:6px 10px; border-radius:6px; margin:0}
+
+.plotcol{display:flex; flex-direction:column; gap:12px; min-width:0}
+.plotcard{padding:12px}
+.canvasbox{position:relative; width:100%; aspect-ratio:16/11; max-width:100%}
+canvas{width:100%; height:100%; display:block}
+.plotcap{font-size:13px; color:var(--muted); margin:0}
+.legend{display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px; color:var(--muted)}
+.legend i{display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px}
+.ctrls{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px}
+@media (max-width:520px){ .ctrls{grid-template-columns:minmax(0,1fr)} }
+.ctrl{display:flex; flex-direction:column; gap:4px; min-width:0}
+.ctrl .row{display:flex; justify-content:space-between; align-items:baseline; gap:6px}
+.ctrl output{font-family:var(--font-mono); font-size:15px; font-weight:600}
+.ctrl input[type=range]{width:100%; accent-color:var(--accent)}
+.lock{font-size:11px; color:var(--muted)}
+.ctrl.locked input{opacity:.4}
+.tablebox{overflow-x:auto; max-height:210px; overflow-y:auto; border:1px solid var(--line); border-radius:8px}
+table{border-collapse:collapse; width:100%; font-family:var(--font-mono); font-size:13px; font-variant-numeric:tabular-nums}
+th,td{padding:5px 10px; text-align:right; border-bottom:1px solid var(--grid); white-space:nowrap}
+th{position:sticky; top:0; background:var(--surface); color:var(--muted); font-weight:600; font-family:var(--font-body)}
+td:first-child,th:first-child{text-align:left}
+tr.curr td{background:var(--accent-soft)}
+
+.eq{font-family:var(--font-mono); font-size:clamp(16px,2.3vw,20px); padding:14px; background:var(--bg); border-radius:8px; overflow-x:auto; display:flex; flex-direction:column; gap:6px}
+.eq .row{white-space:nowrap}
+.c-x{color:var(--accent); font-weight:600} .c-g{color:var(--grad); font-weight:600} .c-n{color:var(--good); font-weight:600}
+.map{display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; font-size:15px; margin:0}
+.map dt{font-family:var(--font-mono); font-weight:600}
+.map dd{margin:0}
+
+.sumtable td,.sumtable th{font-family:var(--font-body); text-align:left; white-space:normal}
+.pill{display:inline-block; padding:1px 9px; border-radius:999px; font-size:13px; font-weight:600}
+.pill.ok{background:var(--good-soft); color:var(--good)} .pill.no{background:var(--bad-soft); color:var(--bad)}
+.score{font-family:var(--font-display); font-size:30px; font-weight:700}
+footer{font-size:13px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center}
+footer button{background:none; border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; color:var(--muted)}
+.logbox{width:100%; min-height:160px; font-family:var(--font-mono); font-size:12px}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Gradient Descent Lab</h1>
+      <p>A 30-minute lesson on gradient descent in one dimension: explore freely, learn the update rule, solve missions, then try a new example on your own.</p>
+    </div>
+    <div class="cond">
+      <span class="label" id="condLabel">Support condition</span>
+      <div class="seg" role="group" aria-labelledby="condLabel">
+        <button id="condAI" aria-pressed="true">Adaptive AI</button>
+        <button id="condFixed" aria-pressed="false">Predefined</button>
+      </div>
+    </div>
+  </header>
+
+  <details class="goals">
+    <summary>Learning goals</summary>
+    <ol>
+      <li>Explain and apply the 1D gradient descent update rule, and relate the gradient to the direction of an update.</li>
+      <li>Predict how changing the learning rate or the starting point affects the optimization trajectory.</li>
+      <li>Diagnose why gradient descent reaches a global or local minimum, converges slowly, oscillates, or diverges.</li>
+    </ol>
+  </details>
+
+  <nav class="track" id="track" aria-label="Lesson progress"></nav>
+
+  <div class="bench">
+    <section class="card" id="panel" aria-live="polite"></section>
+    <section class="plotcol">
+      <div class="card plotcard">
+        <div class="canvasbox"><canvas id="plot" role="img" aria-label="Loss curve with the gradient descent path"></canvas></div>
+        <p class="plotcap" id="plotcap" hidden></p>
+        <div class="legend">
+          <span><i style="background:var(--ink)"></i>loss f(x)</span>
+          <span><i style="background:var(--accent)"></i>path of x</span>
+          <span><i style="background:var(--grad)"></i>slope at the current point</span>
+          <span><i style="background:var(--good)"></i>global minimum</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ctrls">
+          <div class="ctrl" id="c-x0"><div class="row"><label for="x0">Start x₀</label><output id="x0o"></output></div><input type="range" id="x0" min="-4.5" max="4.5" step="0.1"><span class="lock"></span></div>
+          <div class="ctrl" id="c-lr"><div class="row"><label for="lr">Learning rate η</label><output id="lro"></output></div><input type="range" id="lr" min="0.01" max="1.2" step="0.01"><span class="lock"></span></div>
+          <div class="ctrl" id="c-steps"><div class="row"><label for="steps">Steps</label><output id="stepso"></output></div><input type="range" id="steps" min="1" max="30" step="1"><span class="lock"></span></div>
+        </div>
+        <div class="tablebox"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <span id="foot">Event log: 0 entries.</span>
+    <button id="copyLog">Copy log as JSON</button>
+    <button id="restart">Restart lesson</button>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ================= maths ================= */
+function mkFn(o){
+  // o: {f, d, label, xmin, xmax}
+  const mins=[]; const N=4000; const lo=o.xmin-3, hi=o.xmax+3;
+  let px=lo, pd=o.d(lo);
+  for(let i=1;i<=N;i++){ const x=lo+(hi-lo)*i/N, dv=o.d(x);
+    if(pd<0 && dv>=0){ let a=px,b=x; for(let k=0;k<60;k++){ const m=(a+b)/2; if(o.d(m)<0) a=m; else b=m; } mins.push({x:(a+b)/2}); }
+    px=x; pd=dv; }
+  let gi=0; mins.forEach((m,i)=>{ m.f=o.f(m.x); if(m.f<mins[gi].f) gi=i; }); mins.forEach((m,i)=>m.global=i===gi);
+  return {...o, mins, gmin:mins[gi]};
+}
+const BOWL  = mkFn({f:x=>x*x, d:x=>2*x, label:"f(x) = x²   ·   f′(x) = 2x", xmin:-4.5, xmax:4.5});
+const SHIFT = mkFn({f:x=>(x-1)*(x-1), d:x=>2*(x-1), label:"f(x) = (x − 1)²   ·   f′(x) = 2(x − 1)", xmin:-3.5, xmax:5.5});
+const NARROW= mkFn({f:x=>4*x*x, d:x=>8*x, label:"f(x) = 4x²   ·   f′(x) = 8x", xmin:-3, xmax:3});
+const VALLEYS=mkFn({f:x=>0.05*x**4-0.6*x*x+0.4*x, d:x=>0.2*x**3-1.2*x+0.4, label:"f(x) = 0.05x⁴ − 0.6x² + 0.4x   ·   f′(x) = 0.2x³ − 1.2x + 0.4", xmin:-4.5, xmax:4.5});
+const FLAT  = mkFn({f:x=>0.25*x**4, d:x=>x**3, label:"f(x) = x⁴ / 4   ·   f′(x) = x³", xmin:-4.5, xmax:4.5});
+const NEWFN = mkFn({f:x=>0.5*(x-2)*(x-2)+1, d:x=>x-2, label:"f(x) = 0.5(x − 2)² + 1   ·   f′(x) = x − 2", xmin:-3, xmax:7});
+
+function trajectory(fn,x0,lr,steps){ const xs=[x0]; for(let i=0;i<steps;i++){ const x=xs[xs.length-1]; let nx=x-lr*fn.d(x); if(!Number.isFinite(nx)||Math.abs(nx)>1e8) nx=Math.sign(nx||1)*1e8; xs.push(nx); } return xs; }
+function outcome(fn,xs,tol){
+  const N=xs.length-1, last=xs[N];
+  if(Math.abs(last)>=1e7) return "diverge";
+  const near=fn.mins.find(m=>Math.abs(last-m.x)<tol);
+  if(near) return near.global?"global":"local";
+  const dist=x=>Math.min(...fn.mins.map(m=>Math.abs(x-m.x)));
+  if(N>=1 && dist(last)>dist(xs[0])*0.999 && Math.abs(xs[N]-xs[N-1])>=Math.abs(xs[1]-xs[0])*0.999) return "diverge";
+  let alt=0,cnt=0; for(let i=Math.max(1,N-5);i<N;i++){ const a=xs[i]-xs[i-1], b=xs[i+1]-xs[i]; if(a&&b){ cnt++; if(Math.sign(a)!==Math.sign(b)) alt++; } }
+  if(cnt && alt>=cnt*0.6) return "oscillate";
+  return "slow";
+}
+const OUT={global:"Reaches the global minimum in time", local:"Gets stuck in the other valley (a local minimum)", slow:"Heads the right way but doesn't arrive in time", oscillate:"Zig-zags and doesn't settle in time", diverge:"Overshoots more and more (diverges)"};
+const SHORT={global:"global min", local:"local min", slow:"too slow", oscillate:"oscillates", diverge:"diverges"};
+function outLabel(id,fn){ if(id==="global" && fn.mins.length===1) return "Reaches the minimum in time"; return OUT[id]; }
+function outOptions(fn){ return ["global","local","slow","oscillate","diverge"].filter(k=>k!=="local"||fn.mins.length>1).map(id=>({id,label:outLabel(id,fn)})); }
+const fmt=(v,n=3)=>{ if(!Number.isFinite(v)) return "∞"; if(Math.abs(v)>=1e4) return v.toExponential(1); const s=v.toFixed(n); return /^-0\.0+$/.test(s)?s.slice(1):s; };
+function sub(k){return String(k).split("").map(d=>"₀₁₂₃₄₅₆₇₈₉"[+d]).join("");}
+
+/* ================= lesson content ================= */
+const STAGES=[
+  {id:"explore", name:"Explore", min:7},
+  {id:"theory",  name:"Theory", min:7},
+  {id:"missions",name:"Missions", min:12},
+  {id:"assess",  name:"Transfer check", min:4}
+];
+const EXPLORE_HINTS=[
+  "Run the ball with η = 0.1, then with η = 0.5. What changes about the steps?",
+  "Now try η = 0.95 and then η = 1.05. Is a bigger learning rate always better?",
+  "Start once on the left (x₀ < 0) and once on the right (x₀ > 0). Which way does the first step go each time, and why?",
+  "Look at the orange slope line before each step. How does its steepness relate to how far the next step goes?"
+];
+const SCAFFOLD={
+  diverge:["Look at the first step in the table. Is x₁ closer to the minimum than x₀, or farther away?",
+           "Each step has size η·|f′(x)|. If it overshoots the minimum by more than the distance you started from, the error grows every step. What could you change to make the steps shorter?",
+           "The steps overshoot more and more, so the run diverges. Reduce η (for example, halve it) and run again."],
+  oscillate:["Look at the direction of the steps in the table. What pattern do you see?",
+             "The ball keeps jumping across the minimum. A smaller η makes each jump shorter, so the zig-zag dies out sooner.",
+             "η is a bit too large, so every step overshoots. Reduce η a little so the zig-zag settles within the available steps."],
+  slow:["Compare one step η·f′(x) with the distance still left to the minimum. How many steps like that would you need?",
+        "The steps go the right way but are too short. A larger η, or a start where the slope is steeper, covers the distance faster.",
+        "With these settings the run needs more steps than you have. Increase η moderately, and check that the first step does not overshoot."],
+  local:["Which valley did the ball end up in? From your start, which way does the slope point?",
+         "Gradient descent only ever moves downhill from where it starts. On which side of the hump would you have to start to roll into the deeper valley?",
+         "The start is on the slope of the shallow valley, so small downhill steps can never leave it. Move x₀ to the left of the hump (around x = 0.3) and run again."]
+};
+const STEPS=[
+ {id:"explore", stage:"explore", type:"explore", title:"Play with the ball", fn:BOWL, cfg:{x0:3,lr:0.1,steps:10}, free:["x0","lr","steps"], x0Range:[-4.5,4.5],
+  brief:"A ball sits on a loss curve. Each run, an algorithm moves it step by step. Change the start, the learning rate η and the number of steps, run it, and compare what happens. No formulas yet."},
+ {id:"rule", stage:"theory", type:"rule", title:"The update rule", fn:BOWL, cfg:{x0:3,lr:0.2,steps:6}, free:[],
+  brief:"Everything you just tried is one line of maths. Step through a run and watch each part of the rule fill in."},
+ {id:"t1", stage:"theory", type:"check", title:"Compute one update", fn:SHIFT, cfg:{x0:4,lr:0.1,steps:1}, free:[],
+  brief:"A new curve with its minimum at x = 1. Use the rule to compute the first step by hand, then run it to check.",
+  q:{type:"number", prompt:"What is x₁? (two decimals)"},
+  answer:(fn,xs)=>xs[1], check:(p,a)=>Math.abs(p-a)<0.011,
+  explainPrompt:"Why did x move to the left, toward 1?",
+  key:"f′(4) = 2·(4 − 1) = 6 is positive, so −η·f′ is negative and x decreases: x₁ = 4 − 0.1·6 = 3.4. The minus sign makes the step go against the slope, which is downhill.",
+  hints:["Start with the slope at x₀ = 4. What is f′(4) for this curve?","f′(4) = 2·(4 − 1). Multiply it by η = 0.1, then subtract the result from x₀.","f′(4) = 6, so η·f′ = 0.6 and x₁ = 4 − 0.6 = 3.4."]},
+ {id:"t2", stage:"theory", type:"check", title:"Predict a large step", fn:BOWL, cfg:{x0:-2,lr:0.9,steps:10}, free:[],
+  brief:"Back to f(x) = x², now starting at x₀ = −2 with a large learning rate η = 0.9 and 10 steps. Predict first, then run.",
+  q:{type:"choice", prompt:"What will the path do?"}, tol:0.05,
+  answer:(fn,xs,st)=>outcome(fn,xs,st.tol), check:(p,a)=>p===a,
+  explainPrompt:"Why does the path look like this?",
+  key:"f′(−2) = −4, so the first step is −0.9·(−4) = +3.6: it jumps to x₁ = 1.6, past the minimum. Each step multiplies x by 1 − 2η = −0.8, so x flips side every step and shrinks only slowly; after 10 steps it is still about 0.2 away.",
+  hints:["Compute the first step: f′(−2) = −4. How far does η·f′ move x, and where does it land?","x₁ = −2 − 0.9·(−4) = 1.6, on the other side of the minimum. Is it closer than −2 was? What will the next step do?","Each step multiplies x by (1 − 2·0.9) = −0.8: the sign flips every step and the size shrinks only by 20%. It zig-zags and does not settle in 10 steps."]},
+ {id:"m1", stage:"missions", type:"mission", title:"Into the bowl", fn:BOWL, cfg:{x0:3,lr:0.05,steps:8}, free:["lr"], tol:0.05,
+  brief:"Reach the global minimum (within 0.05) in 8 steps. The start is fixed at x₀ = 3; you choose η.",
+  key:"Each step removes a fraction 2η of the distance. Too small and it runs out of steps; a moderate η (about 0.2 to 0.8) gets there in time."},
+ {id:"m2", stage:"missions", type:"mission", title:"A narrow bowl", fn:NARROW, cfg:{x0:2,lr:0.3,steps:8}, free:["lr"], tol:0.05,
+  brief:"This bowl is four times steeper. Reach the minimum within 0.05 in 8 steps from x₀ = 2. You choose η.",
+  key:"The slope is four times larger, so the same η makes four times bigger steps. η must be much smaller here (about 0.05 to 0.2) to avoid overshooting."},
+ {id:"m3", stage:"missions", type:"mission", title:"Two valleys", fn:VALLEYS, cfg:{x0:2.5,lr:0.1,steps:25}, free:["x0","lr"], x0Range:[-1,4.5], tol:0.05,
+  brief:"This curve has two valleys. Reach the deeper one (the global minimum) within 0.05 in 25 steps. You choose x₀ (from −1 to 4.5) and η.",
+  key:"Gradient descent only goes downhill from where it starts. Starting right of the hump near x = 0.34 always ends in the shallow valley; starting left of it rolls into the deeper one."},
+ {id:"m4", stage:"missions", type:"mission", title:"Steep walls, flat floor", fn:FLAT, cfg:{x0:3,lr:0.3,steps:12}, free:["x0","lr"], x0Range:[1,4.5], tol:0.25,
+  brief:"Steep walls but a very flat bottom. Get within 0.25 of the minimum in 12 steps. You choose x₀ (from 1 to 4.5) and η.",
+  key:"The slope x³ is huge on the walls and tiny near the bottom, so one η can overshoot high up and still crawl at the bottom. Starting lower down allows a larger η without overshooting."},
+ {id:"assess", stage:"assess", type:"assess", title:"A new example", fn:NEWFN, cfg:{x0:6,lr:1.8,steps:10}, free:[], tol:0.05,
+  brief:"A curve you have not seen before. Answer on your own; the tutor is switched off for this part."}
+];
+const ASSESS_Q=[
+ {id:"a1", type:"number", prompt:"Start at x₀ = 6 with η = 0.5. What is x₁?", answer:4, check:(p)=>Math.abs(p-4)<0.011, why:"f′(6) = 6 − 2 = 4, so x₁ = 6 − 0.5·4 = 4."},
+ {id:"a2", type:"choice", prompt:"From x₀ = 6 with η = 0.5 the ball reaches the minimum. What happens if η is changed to 2.5 (10 steps)?",
+  options:[{id:"global",label:"It still reaches the minimum, just faster"},{id:"oscillate",label:"It zig-zags and doesn't settle in time"},{id:"slow",label:"It heads the right way but doesn't arrive in time"},{id:"diverge",label:"It overshoots more and more (diverges)"}],
+  answer:"diverge", why:"Each step multiplies the distance to x = 2 by (1 − η) = −1.5: the sign flips and the error grows by 50% every step."},
+ {id:"a3", type:"choice", prompt:"The plot shows a run from x₀ = 6 with η = 1.8 and 10 steps. Diagnose it.",
+  options:outOptions(NEWFN), answer:"oscillate", why:"Each step multiplies the distance by (1 − 1.8) = −0.8: it overshoots every time and shrinks only 20% per step, so after 10 steps it is still about 0.4 away."}
+];
+
+/* ================= state ================= */
+const S={i:0, phase:"setup", cond:"ai", pred:null, reason:"", xs:null, shown:1, anim:null, last:null,
+  results:{}, threads:{}, hintLevel:{}, fails:{}, signals:{}, runs:{}, log:[], draft:"", ruleSeen:1,
+  exploreHint:0, assessAns:{}, assessDone:false, stageStart:Date.now(), aiOK:null, lastRunCfg:null, completeLogged:false};
+let sampleFn=null;
+/* Address of your own tutor relay (Cloudflare Worker). Leave empty to use Claude inside claude.ai. */
+const TUTOR_ENDPOINT="";
+const hasEndpoint=()=>/^https:\/\//.test(TUTOR_ENDPOINT);
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const cur=()=>STEPS[S.i];
+function logEv(ev,data){ S.log.push({t:new Date().toISOString(),cond:S.cond,step:cur()?cur().id:"end",ev,...data}); $("foot").textContent=`Event log: ${S.log.length} entries.`; }
+function el(tag,attrs={},html){ const e=document.createElement(tag); for(const k in attrs){ if(k==="class") e.className=attrs[k]; else if(k.startsWith("on")) e.addEventListener(k.slice(2),attrs[k]); else e.setAttribute(k,attrs[k]); } if(html!=null) e.innerHTML=html; return e; }
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ================= controls ================= */
+const ctl={x0:$("x0"),lr:$("lr"),steps:$("steps")};
+function cfg(){ return {x0:+ctl.x0.value, lr:+ctl.lr.value, steps:+ctl.steps.value}; }
+function syncOutputs(){ $("x0o").textContent=fmt(+ctl.x0.value,1); $("lro").textContent=fmt(+ctl.lr.value,2); $("stepso").textContent=ctl.steps.value; }
+function editable(){ const st=cur(); if(!st) return false; if(st.type==="explore") return S.phase!=="running"; if(st.type==="mission") return S.phase==="setup"; return false; }
+function applyLocks(){
+  const st=cur(); const free=st?st.free:[]; const ed=editable();
+  for(const k of ["x0","lr","steps"]){
+    const box=$("c-"+k); const locked=!st||!free.includes(k)||!ed;
+    ctl[k].disabled=locked; box.classList.toggle("locked",locked);
+    box.querySelector(".lock").textContent = !st ? "" : free.includes(k) ? (ed?"You choose this":"Locked during the run") : "Set by this step";
+  }
+}
+for(const k in ctl){ ctl[k].addEventListener("input",()=>{ syncOutputs(); if(editable()){ S.xs=null; S.shown=1; draw(); renderTable(); } }); }
+
+/* ================= plot ================= */
+const cv=$("plot"); const ctx=cv.getContext("2d");
+function tok(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function plotXs(){ const c=cfg(); return S.xs||[c.x0]; }
+function view(fn){
+  const xmin=fn.xmin, xmax=fn.xmax; let lo=Infinity, hiR=-Infinity;
+  for(let i=0;i<=200;i++){ const v=fn.f(xmin+(xmax-xmin)*i/200); lo=Math.min(lo,v); hiR=Math.max(hiR,v); }
+  const xs=plotXs(); let top=-Infinity;
+  for(const x of xs){ if(x>=xmin&&x<=xmax) top=Math.max(top,fn.f(x)); }
+  for(const m of fn.mins) top=Math.max(top,fn.f(m.x));
+  // show the interesting band: at least the valleys, at least the start point
+  const minBand=(hiR-lo)*0.35; top=Math.max(top, lo+minBand);
+  top=Math.min(hiR, lo+(top-lo)*1.15);
+  return {xmin,xmax,ymin:lo-(top-lo)*0.06,ymax:top};
+}
+function draw(){
+  const st=cur(); if(!st) return;
+  const fn=st.fn; const r=cv.getBoundingClientRect(); const dpr=window.devicePixelRatio||1; if(r.width<10) return;
+  cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=r.width,H=r.height,pad={l:46,r:14,t:16,b:30};
+  const v=view(fn);
+  const X=x=>pad.l+(x-v.xmin)/(v.xmax-v.xmin)*(W-pad.l-pad.r);
+  const Y=y=>pad.t+(1-(y-v.ymin)/(v.ymax-v.ymin))*(H-pad.t-pad.b);
+  const ink=tok("--ink"),muted=tok("--muted"),grid=tok("--grid"),acc=tok("--accent"),gr=tok("--grad"),surf=tok("--surface"),line=tok("--line"),good=tok("--good");
+  ctx.fillStyle=surf; ctx.fillRect(0,0,W,H);
+  ctx.font=`12px ${tok("--font-mono")}`; ctx.textBaseline="middle";
+  const stepX=(v.xmax-v.xmin)>8?2:1;
+  for(let gx=Math.ceil(v.xmin/stepX)*stepX; gx<=v.xmax+1e-9; gx+=stepX){ ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(X(gx),pad.t); ctx.lineTo(X(gx),H-pad.b); ctx.stroke(); ctx.fillStyle=muted; ctx.textAlign="center"; ctx.fillText(String(gx),X(gx),H-pad.b+14); }
+  const raw=(v.ymax-v.ymin)/5; const p=Math.pow(10,Math.floor(Math.log10(raw))); const ys=[1,2,5,10].map(k=>k*p).find(k=>k>=raw)||raw;
+  for(let gy=Math.ceil(v.ymin/ys)*ys; gy<=v.ymax; gy+=ys){ ctx.strokeStyle=grid; ctx.beginPath(); ctx.moveTo(pad.l,Y(gy)); ctx.lineTo(W-pad.r,Y(gy)); ctx.stroke(); ctx.fillStyle=muted; ctx.textAlign="right"; ctx.fillText(String(+gy.toFixed(3)),pad.l-6,Y(gy)); }
+  ctx.fillStyle=muted; ctx.textAlign="right"; ctx.fillText("x",W-pad.r,H-pad.b+14);
+  ctx.save(); ctx.beginPath(); ctx.rect(pad.l,pad.t,W-pad.l-pad.r,H-pad.t-pad.b); ctx.clip();
+  ctx.strokeStyle=ink; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<=300;i++){ const x=v.xmin+(v.xmax-v.xmin)*i/300; const y=Y(fn.f(x)); i?ctx.lineTo(X(x),y):ctx.moveTo(X(x),y); } ctx.stroke();
+  for(const m of fn.mins){ ctx.strokeStyle=m.global?good:line; ctx.setLineDash([3,4]); ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(X(m.x),Y(m.f)); ctx.lineTo(X(m.x),H-pad.b); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=m.global?good:muted; ctx.textAlign="left"; ctx.fillText(fn.mins.length>1?(m.global?"global min":"local min"):"min",X(m.x)+5,Y(m.f)+14); }
+  const xs=plotXs(); const n=Math.min(S.shown,xs.length);
+  const inView=x=>x>=v.xmin&&x<=v.xmax&&fn.f(x)<=v.ymax;
+  const cx=x=>Math.max(v.xmin,Math.min(v.xmax,x)); const cy=x=>Math.min(fn.f(x),v.ymax);
+  for(let k=0;k<n-1;k++){ ctx.globalAlpha=.35+.65*(k+1)/n; arrow(X(cx(xs[k])),Y(cy(xs[k])),X(cx(xs[k+1])),Y(cy(xs[k+1])),acc); }
+  ctx.globalAlpha=1;
+  for(let k=0;k<n;k++){ const x=xs[k]; if(!inView(x)) continue; ctx.beginPath(); ctx.arc(X(x),Y(fn.f(x)),k===n-1?6:4,0,Math.PI*2); ctx.fillStyle=k===n-1?acc:surf; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=acc; ctx.stroke();
+    if(n<=7||k===0||k===n-1){ ctx.fillStyle=muted; ctx.textAlign="center"; ctx.fillText("x"+sub(k),X(x),Y(fn.f(x))-14); } }
+  const xc=xs[n-1];
+  if(inView(xc)){ const s=fn.d(xc); const dx=(v.xmax-v.xmin)*0.08; const sy=(v.ymax-v.ymin)/(H-pad.t-pad.b), sx=(v.xmax-v.xmin)/(W-pad.l-pad.r);
+    // keep the tangent short on screen even when it is steep
+    const pxLen=60, ang=Math.atan2(s*dx/sy, dx/sx); const ddx=Math.cos(ang)*pxLen, ddy=Math.sin(ang)*pxLen;
+    ctx.strokeStyle=gr; ctx.lineWidth=2.4; ctx.beginPath(); ctx.moveTo(X(xc)-ddx,Y(fn.f(xc))+ddy); ctx.lineTo(X(xc)+ddx,Y(fn.f(xc))-ddy); ctx.stroke(); }
+  ctx.restore();
+  if(!inView(xc)){ ctx.fillStyle=tok("--bad"); ctx.font=`600 13px ${tok("--font-body")}`; ctx.textAlign=xc>fn.gmin.x?"right":"left"; ctx.fillText(`x${sub(n-1)} = ${fmt(xc,1)} is off the chart`, xc>fn.gmin.x?W-pad.r-6:pad.l+6, pad.t+12); }
+  ctx.strokeStyle=line; ctx.lineWidth=1; ctx.strokeRect(pad.l+.5,pad.t+.5,W-pad.l-pad.r-1,H-pad.t-pad.b-1);
+}
+function arrow(x1,y1,x2,y2,col){ ctx.strokeStyle=col; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); if(Math.hypot(x2-x1,y2-y1)<14) return; const a=Math.atan2(y2-y1,x2-x1), h=8, ex=x2-Math.cos(a)*7, ey=y2-Math.sin(a)*7; ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex-h*Math.cos(a-0.45),ey-h*Math.sin(a-0.45)); ctx.lineTo(ex-h*Math.cos(a+0.45),ey-h*Math.sin(a+0.45)); ctx.closePath(); ctx.fill(); }
+new ResizeObserver(()=>draw()).observe(cv);
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw); new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]}); }catch(e){}
+
+function renderTable(){
+  const st=cur(), th=$("thead"), tb=$("tbody"); tb.innerHTML=""; if(!st){ th.innerHTML=""; return; }
+  const explore=st.type==="explore";
+  th.innerHTML = explore ? "<tr><th>step t</th><th>xₜ</th><th>f(xₜ)</th></tr>" : "<tr><th>t</th><th>xₜ</th><th>f′(xₜ)</th><th>η·f′(xₜ)</th><th>f(xₜ)</th></tr>";
+  const c=cfg(); const xs=plotXs(); const n=Math.min(S.shown,xs.length);
+  const hide = st.q && st.q.type==="number" && S.phase==="setup";
+  for(let k=0;k<n;k++){ const x=xs[k], g=st.fn.d(x); const tr=document.createElement("tr"); if(k===n-1) tr.className="curr";
+    tr.innerHTML = explore ? `<td>${k}</td><td>${fmt(x)}</td><td>${fmt(st.fn.f(x))}</td>` : hide ? `<td>${k}</td><td>${fmt(x)}</td><td>?</td><td>?</td><td>${fmt(st.fn.f(x))}</td>` : `<td>${k}</td><td>${fmt(x)}</td><td>${fmt(g)}</td><td>${fmt(c.lr*g)}</td><td>${fmt(st.fn.f(x))}</td>`;
+    tb.appendChild(tr); }
+  const box=tb.closest(".tablebox"); if(box) box.scrollTop=box.scrollHeight;
+}
+function animate(done){
+  clearInterval(S.anim);
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches){ S.shown=S.xs.length; draw(); renderTable(); done(); return; }
+  S.shown=1; draw(); renderTable();
+  S.anim=setInterval(()=>{ S.shown++; draw(); renderTable(); if(S.shown>=S.xs.length){ clearInterval(S.anim); S.anim=null; done(); } }, S.xs.length>14?170:S.xs.length>8?250:340);
+}
+
+/* ================= track & clock ================= */
+function renderTrack(){
+  const t=$("track"); t.innerHTML="";
+  STAGES.forEach(sg=>{ const steps=STEPS.map((s,i)=>({s,i})).filter(o=>o.s.stage===sg.id); const isCur=cur()&&cur().stage===sg.id;
+    const box=el("div",{class:"stage"+(isCur?" cur":"")}); box.appendChild(el("span",{class:"sname"},`${esc(sg.name)} · ${sg.min} min`));
+    const pips=el("div",{class:"pips"}); let n=0;
+    steps.forEach(({s,i})=>{ const lab=s.type==="rule"?"rule":s.type==="explore"?"go":s.type==="assess"?"✓":String(++n); pips.appendChild(el("span",{class:"pip"+(i===S.i?" cur":"")+(S.results[s.id]?.done?" done":""),title:s.title},lab)); });
+    box.appendChild(pips); t.appendChild(box); });
+}
+setInterval(()=>{ const c=document.querySelector(".clock"); if(!c||!cur()) return; const sg=STAGES.find(s=>s.id===cur().stage); const sec=Math.floor((Date.now()-S.stageStart)/1000); c.textContent=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")} / ~${sg.min}:00`; },1000);
+
+/* ================= panel ================= */
+function head(box,st){
+  const sg=STAGES.find(s=>s.id===st.stage);
+  const row=el("div",{class:"eyerow"});
+  let label=sg.name;
+  if(st.type==="mission"){ label+=` · Mission ${STEPS.filter(s=>s.type==="mission").indexOf(st)+1} of 4`; }
+  if(st.type==="check"){ label+=" · Check"; }
+  row.appendChild(el("span",{class:"eyebrow"},esc(label))); row.appendChild(el("span",{class:"clock"},""));
+  box.appendChild(row);
+  box.appendChild(el("h2",{class:"mtitle"},esc(st.title)));
+  box.appendChild(el("p",{class:"brief"},esc(st.brief)));
+  box.appendChild(el("div",{class:"fnline"},esc(st.type==="explore"?"f(x) = x²":st.fn.label)));
+}
+function renderPanel(){
+  renderTrack(); applyLocks();
+  const box=$("panel"); box.innerHTML="";
+  const st=cur(); $("plotcap").hidden=true;
+  if(!st){ renderSummary(box); return; }
+  head(box,st);
+  ({explore:renderExplore, rule:renderRule, check:renderCheck, mission:renderMission, assess:renderAssess})[st.type](box,st);
+  const clock=document.querySelector(".clock"); if(clock){ const sg=STAGES.find(s=>s.id===st.stage); const sec=Math.floor((Date.now()-S.stageStart)/1000); clock.textContent=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")} / ~${sg.min}:00`; }
+}
+
+/* ---- explore ---- */
+function renderExplore(box,st){
+  const runs=S.runs.explore||[];
+  const b=el("div",{class:"btns"});
+  const rb=el("button",{class:"btn",id:"runBtn"},"Run"); rb.disabled=S.phase==="running"; rb.addEventListener("click",exploreRun);
+  b.appendChild(rb); box.appendChild(b);
+  if(runs.length){
+    const list=el("div",{class:"runs"}); list.appendChild(el("span",{class:"label"},"Your runs"));
+    runs.slice(-6).forEach((r,i)=>{ const row=el("div",{class:"r"}); row.innerHTML=`<span class="mono">x₀ ${fmt(r.x0,1)} · η ${fmt(r.lr,2)} · ${r.steps} steps</span><span class="chip ${r.out}">${SHORT[r.out]}</span>`; list.appendChild(row); });
+    box.appendChild(list);
+  }
+  const distinctLr=new Set(runs.map(r=>r.lr)).size;
+  const ready=runs.length>=3 && distinctLr>=2;
+  const nb=el("div",{class:"btns"}); const go=el("button",{class:"btn ghost",onclick:()=>{ S.results.explore={done:true,runs:runs.length}; logEv("explore_done",{runs:runs.length,distinctLr}); next(); }},"Continue to the theory"); go.disabled=!ready; nb.appendChild(go); box.appendChild(nb);
+  box.appendChild(el("p",{class:"hintline"}, ready?"Explore as long as you like, then continue.":"Do at least three runs with at least two different learning rates to continue."));
+  box.appendChild(tutorBox(st));
+}
+function exploreRun(){
+  const st=cur(), c=cfg();
+  S.xs=trajectory(st.fn,c.x0,c.lr,c.steps); S.phase="running"; renderPanel();
+  animate(()=>{ const out=outcome(st.fn,S.xs,0.05); (S.runs.explore=S.runs.explore||[]).push({...c,out}); logEv("explore_run",{cfg:c,observed:out}); S.phase="setup"; renderPanel(); });
+}
+
+/* ---- rule ---- */
+function renderRule(box,st){
+  if(!S.xs) S.xs=trajectory(st.fn,st.cfg.x0,st.cfg.lr,st.cfg.steps);
+  const xs=S.xs, t=Math.max(0,Math.min(S.shown-1,xs.length-2)); const x=xs[t], g=st.fn.d(x), nx=xs[t+1];
+  const eq=el("div",{class:"eq"});
+  eq.appendChild(el("div",{class:"row"},`x<sub>t+1</sub> = <span class="c-x">x<sub>t</sub></span> − <span class="c-n">η</span> · <span class="c-g">f′(x<sub>t</sub>)</span>`));
+  eq.appendChild(el("div",{class:"row"},`x${sub(t+1)} = <span class="c-x">${fmt(x)}</span> − <span class="c-n">${fmt(st.cfg.lr,2)}</span> · <span class="c-g">${fmt(g)}</span> = ${fmt(nx)}`));
+  box.appendChild(eq);
+  const dl=el("dl",{class:"map"});
+  dl.innerHTML=`<dt class="c-x">xₜ</dt><dd>The current position: the blue dot you moved with the start slider.</dd>
+  <dt class="c-g">f′(xₜ)</dt><dd>The derivative, drawn as the orange slope line. Its sign sets the direction; its size scales the step.</dd>
+  <dt class="c-n">η</dt><dd>The learning rate you changed while exploring. It scales every step.</dd>
+  <dt>−</dt><dd>Step against the slope, so always downhill.</dd>
+  <dt>x<sub>t+1</sub></dt><dd>The next position: the next dot on the path.</dd>`;
+  box.appendChild(dl);
+  const b=el("div",{class:"btns"});
+  const prev=el("button",{class:"btn ghost",onclick:()=>{ S.shown=Math.max(1,S.shown-1); draw(); renderTable(); renderPanel(); }},"Previous step"); prev.disabled=S.shown<=1;
+  const nx2=el("button",{class:"btn ghost",onclick:()=>{ S.shown=Math.min(xs.length,S.shown+1); S.ruleSeen=Math.max(S.ruleSeen,S.shown); draw(); renderTable(); renderPanel(); }},"Next step"); nx2.disabled=S.shown>=xs.length;
+  const go=el("button",{class:"btn",onclick:()=>{ S.results.rule={done:true}; logEv("rule_done",{stepsViewed:S.ruleSeen}); next(); }},"Check my understanding"); go.disabled=S.ruleSeen<3;
+  b.append(prev,nx2,go); box.appendChild(b);
+  box.appendChild(el("p",{class:"hintline"}, S.ruleSeen<3?"Step through at least two updates to continue.":"Compare the numbers with the table under the plot."));
+}
+
+/* ---- check (theory) ---- */
+const CYC=[["setup","Predict"],["running","Run"],["observed","Compare"],["explain","Explain"]];
+function cycle(box){ const idx={setup:0,running:1,wrong:2,explain:3,done:4}[S.phase]??0; const c=el("div",{class:"cycle"}); CYC.forEach(([k,l],i)=>c.appendChild(el("span",{class:i===idx?"on":i<idx?"past":""},l))); box.appendChild(c); }
+function predictionUI(box,st,opts,required){
+  const q=el("div",{class:"q"}); const ed=S.phase==="setup";
+  q.appendChild(el("div",{class:"prompt"},esc(st.q?st.q.prompt:"Before you run: what will the path do?")+(required?"":" <span class=\"hintline\">(optional)</span>")));
+  if(!st.q||st.q.type==="choice"){
+    opts.forEach(o=>{ const id=`opt-${st.id}-${o.id}`; const lab=el("label",{class:"opt"+(S.pred===o.id?" sel":"")+(ed?"":" dis"),for:id});
+      const inp=el("input",{type:"radio",name:"pred-"+st.id,id,value:o.id}); inp.checked=S.pred===o.id; inp.disabled=!ed;
+      inp.addEventListener("change",()=>{ S.pred=o.id; markPred(st); renderPanel(); });
+      lab.appendChild(inp); lab.appendChild(el("span",{},esc(o.label))); q.appendChild(lab); });
+  } else {
+    const row=el("div",{class:"numrow"}); const inp=el("input",{type:"number",step:"0.01",id:"num-"+st.id,"aria-label":"Your answer"}); if(S.pred!=null) inp.value=S.pred; inp.disabled=!ed;
+    inp.addEventListener("input",()=>{ S.pred=inp.value===""?null:+inp.value; markPred(st); const rb=$("runBtn"); if(rb) rb.disabled=S.pred==null; });
+    row.appendChild(el("span",{class:"mono"},"x₁ =")); row.appendChild(inp); q.appendChild(row);
+  }
+  if(ed){ const why=el("input",{type:"text",class:"why",id:"why-"+st.id,placeholder:"Why do you think so? (optional)","aria-label":"Reason for your prediction"}); why.value=S.reason; why.addEventListener("input",()=>S.reason=why.value); q.appendChild(why); }
+  box.appendChild(q);
+}
+function markPred(st){ const sg=S.signals[st.id]; if(sg && !sg.firstPredAt) sg.firstPredAt=Date.now(); }
+function renderCheck(box,st){
+  cycle(box);
+  const opts=st.q.type==="choice"?outOptions(st.fn):null;
+  predictionUI(box,st,opts,true);
+  if(S.phase==="setup"){ const b=el("div",{class:"btns"}); const rb=el("button",{class:"btn",id:"runBtn"},"Lock in & run"); rb.disabled=S.pred==null; rb.addEventListener("click",checkRun); b.appendChild(rb); box.appendChild(b); }
+  if(S.last && ["wrong","explain","done"].includes(S.phase)) box.appendChild(outcomeCard(st,S.last));
+  if(S.phase==="wrong"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:resetAttempt},"Try again")); box.appendChild(b); }
+  if(S.phase==="explain") explainUI(box,st);
+  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},"Continue")); box.appendChild(b); }
+  box.appendChild(tutorBox(st));
+}
+function resetAttempt(){ const st=cur(); S.phase="setup"; S.pred=null; S.reason=""; S.xs=null; S.shown=1; if(S.signals[st.id]){ S.signals[st.id].firstPredAt=null; S.signals[st.id].shownAt=Date.now(); } renderPanel(); draw(); renderTable(); }
+function signalsFor(st,c){
+  const sg=S.signals[st.id];
+  sg.runs=(sg.runs||0)+1;
+  sg.sameSettingsRerun=!!(S.lastRunCfg&&S.lastRunCfg.step===st.id&&S.lastRunCfg.lr===c.lr&&S.lastRunCfg.x0===c.x0);
+  sg.etaChange=S.lastRunCfg&&S.lastRunCfg.step===st.id?+(c.lr-S.lastRunCfg.lr).toFixed(2):null;
+  sg.secondsBeforePredicting=sg.firstPredAt?Math.round((sg.firstPredAt-(sg.shownAt||Date.now()))/1000):null;
+  S.lastRunCfg={step:st.id,...c};
+  return {...sg};
+}
+function checkRun(){
+  const st=cur(), c=cfg(); const sig=signalsFor(st,c);
+  S.xs=trajectory(st.fn,c.x0,c.lr,c.steps); S.phase="running"; renderPanel();
+  animate(()=>{
+    const actual=st.answer(st.fn,S.xs,st); const ok=st.check(S.pred,actual);
+    S.last={pred:S.pred,actual,predOK:ok,success:ok,cfg:c,xs:S.xs.slice(),reason:S.reason,out:st.q.type==="choice"?actual:null};
+    const R=S.results[st.id]||(S.results[st.id]={attempts:[],firstTry:null}); R.attempts.push({pred:S.pred,actual,ok}); if(R.firstTry==null) R.firstTry=ok;
+    logEv("check_answer",{prediction:S.pred,reason:S.reason,correct:actual,ok,signals:sig});
+    if(ok){ S.phase="explain"; tutorSay(st,"correct"); }
+    else { S.hintLevel[st.id]=(S.hintLevel[st.id]||0)+1; S.phase="wrong"; tutorSay(st,"wrong"); }
+    renderPanel();
+  });
+}
+function explainUI(box,st){
+  const ex=el("div",{class:"q"}); ex.appendChild(el("label",{class:"prompt",for:"exp-"+st.id},esc(st.explainPrompt||"Explain in your own words why this happened.")));
+  const ta=el("textarea",{id:"exp-"+st.id,placeholder:"One or two sentences. Use the plot and the table."}); ta.value=S.draft; ex.appendChild(ta);
+  const b=el("div",{class:"btns"}); const sb=el("button",{class:"btn"},"Submit explanation"); sb.disabled=ta.value.trim().length<12;
+  ta.addEventListener("input",()=>{ S.draft=ta.value; sb.disabled=ta.value.trim().length<12; });
+  sb.addEventListener("click",()=>{ const text=ta.value.trim(); S.results[st.id].explanation=text; S.results[st.id].done=true; logEv("explanation",{text}); pushMsg(st,"s",text); S.phase="done"; S.draft=""; tutorSay(st,"explain",text); renderPanel(); });
+  b.appendChild(sb); ex.appendChild(b); box.appendChild(ex);
+}
+function outcomeCard(st,last){
+  const fn=st.fn; const lab=v=> typeof v==="number"?fmt(v,2):outLabel(v,fn);
+  const d=el("div",{class:"outcome "+(last.success?"ok":"no")});
+  let verdict;
+  if(st.type==="mission"){ verdict = last.success ? "Goal reached" : "Goal not reached yet"; }
+  else verdict = last.success ? "Correct" : "Not quite";
+  d.appendChild(el("div",{class:"verdict"},verdict));
+  if(last.pred!=null){ d.appendChild(el("span",{class:"k"},"You predicted")); d.appendChild(el("span",{},esc(lab(last.pred))+(st.type==="mission"?(last.predOK?" ✓":" ✗"):""))); }
+  d.appendChild(el("span",{class:"k"},"Observed")); d.appendChild(el("span",{},esc(lab(last.actual))));
+  if(st.type==="mission"){ const end=last.xs[last.xs.length-1]; d.appendChild(el("span",{class:"k"},"Final x")); d.appendChild(el("span",{class:"mono"},`x${sub(last.cfg.steps)} = ${fmt(end)} (global min at ${fmt(fn.gmin.x,2)}, target within ${st.tol})`)); }
+  return d;
+}
+
+/* ---- missions ---- */
+function renderMission(box,st){
+  const tries=(S.results[st.id]?.attempts||[]);
+  cycle(box);
+  const required=tries.length===0;
+  if(S.phase==="setup" || S.phase==="running") predictionUI(box,st,outOptions(st.fn),required);
+  if(S.phase==="setup"){ const b=el("div",{class:"btns"}); const rb=el("button",{class:"btn",id:"runBtn"},required?"Lock in prediction & run":"Run"); rb.disabled=required&&S.pred==null; rb.addEventListener("click",missionRun); b.appendChild(rb); box.appendChild(b);
+    box.appendChild(el("p",{class:"hintline"},required?"Predict before your first attempt. Later attempts: predicting is optional but encouraged.":"Change the settings on the right, then run again.")); }
+  if(S.last && S.phase!=="running") box.appendChild(outcomeCard(st,S.last));
+  if(tries.length>1){ const list=el("div",{class:"runs"}); list.appendChild(el("span",{class:"label"},"Attempts"));
+    tries.slice(-5).forEach(r=>{ const row=el("div",{class:"r"}); row.innerHTML=`<span class="mono">x₀ ${fmt(r.x0,1)} · η ${fmt(r.lr,2)}</span><span class="chip ${r.out}">${SHORT[r.out]}</span>`; list.appendChild(row); }); box.appendChild(list); }
+  if(S.phase==="explain") explainUI(box,st);
+  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},st.id==="m4"?"Go to the transfer check":"Next mission")); box.appendChild(b); }
+  box.appendChild(tutorBox(st));
+}
+function missionRun(){
+  const st=cur(), c=cfg(); const sig=signalsFor(st,c);
+  S.xs=trajectory(st.fn,c.x0,c.lr,c.steps); S.phase="running"; renderPanel();
+  animate(()=>{
+    const out=outcome(st.fn,S.xs,st.tol); const success=out==="global"; const predOK=S.pred==null?null:S.pred===out;
+    S.last={pred:S.pred,actual:out,predOK,success,cfg:c,xs:S.xs.slice(),reason:S.reason,out};
+    const R=S.results[st.id]||(S.results[st.id]={attempts:[],firstTry:null}); R.attempts.push({x0:c.x0,lr:c.lr,pred:S.pred,out,predOK}); if(R.firstTry==null) R.firstTry=success;
+    const F=S.fails[st.id]||(S.fails[st.id]={}); if(!success) F[out]=(F[out]||0)+1;
+    logEv("mission_run",{cfg:c,prediction:S.pred,reason:S.reason,observed:out,success,predOK,signals:sig});
+    S.pred=null; S.reason="";
+    if(success){ S.phase="explain"; tutorSay(st,"mission_success"); }
+    else { S.phase="setup"; tutorSay(st,"mission_fail"); }
+    renderPanel();
+  });
+}
+
+/* ---- assessment ---- */
+function renderAssess(box,st){
+  if(!S.xs){ S.xs=trajectory(st.fn,6,1.8,10); S.shown=S.xs.length; draw(); renderTable(); }
+  $("plotcap").hidden=false; $("plotcap").textContent="Plot and table: the run for question 3 (x₀ = 6, η = 1.8, 10 steps).";
+  ASSESS_Q.forEach((q,qi)=>{
+    const w=el("div",{class:"q"}); w.appendChild(el("div",{class:"prompt"},`<span class="qnum">Q${qi+1}</span>${esc(q.prompt)}`));
+    const ans=S.assessAns[q.id];
+    if(q.type==="number"){ const row=el("div",{class:"numrow"}); const inp=el("input",{type:"number",step:"0.01",id:"as-"+q.id,"aria-label":"Answer to question "+(qi+1)}); if(ans?.v!=null) inp.value=ans.v; inp.disabled=S.assessDone;
+      inp.addEventListener("input",()=>{ S.assessAns[q.id]={v:inp.value===""?null:+inp.value}; updateSubmit(); }); row.appendChild(el("span",{class:"mono"},"x₁ =")); row.appendChild(inp);
+      if(S.assessDone) row.appendChild(el("span",{class:"pill "+(q.check(ans?.v)?"ok":"no")},q.check(ans?.v)?"Correct":`Answer: ${q.answer}`)); w.appendChild(row); }
+    else q.options.forEach(o=>{ const id=`as-${q.id}-${o.id}`; let cls="opt"; if(ans?.v===o.id) cls+=" sel"; if(S.assessDone){ cls+=" dis"; if(o.id===q.answer) cls+=" right"; else if(ans?.v===o.id) cls+=" wrongsel"; }
+      const lab=el("label",{class:cls,for:id}); const inp=el("input",{type:"radio",name:"as-"+q.id,id,value:o.id}); inp.checked=ans?.v===o.id; inp.disabled=S.assessDone;
+      inp.addEventListener("change",()=>{ S.assessAns[q.id]={v:o.id}; renderPanel(); }); lab.appendChild(inp); lab.appendChild(el("span",{},esc(o.label))); w.appendChild(lab); });
+    if(S.assessDone) w.appendChild(el("p",{class:"hintline"},esc(q.why)));
+    box.appendChild(w);
+  });
+  if(!S.assessDone){
+    const why=el("textarea",{id:"as-why",placeholder:"Q3: in one sentence, why does the run look like this?"}); why.value=S.assessAns.a3why||""; why.addEventListener("input",()=>S.assessAns.a3why=why.value); box.appendChild(why);
+    const b=el("div",{class:"btns"}); const sb=el("button",{class:"btn",id:"assessSubmit"},"Submit answers"); sb.addEventListener("click",submitAssess); b.appendChild(sb); box.appendChild(b); updateSubmit();
+  } else {
+    const sc=ASSESS_Q.filter(q=>q.type==="number"?q.check(S.assessAns[q.id]?.v):S.assessAns[q.id]?.v===q.answer).length;
+    const o=el("div",{class:"outcome neutral"}); o.appendChild(el("div",{class:"verdict"},`<span class="score">${sc} / 3</span>`)); box.appendChild(o);
+    const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},"See lesson summary")); box.appendChild(b);
+  }
+  const t=el("div",{class:"tutor"}); t.appendChild(el("span",{class:"label"},"Tutor")); t.appendChild(el("p",{class:"hintline"},"The tutor is switched off during the transfer check.")); box.appendChild(t);
+}
+function updateSubmit(){ const sb=$("assessSubmit"); if(!sb) return; sb.disabled=!ASSESS_Q.every(q=>S.assessAns[q.id]?.v!=null); }
+function submitAssess(){
+  S.assessDone=true; const res={};
+  ASSESS_Q.forEach(q=>{ const v=S.assessAns[q.id]?.v; res[q.id]={answer:v,correct:q.type==="number"?q.check(v):v===q.answer}; });
+  const score=Object.values(res).filter(r=>r.correct).length;
+  S.results.assess={done:true,score,res,why:S.assessAns.a3why||""};
+  logEv("assessment",{score,answers:res,q3Explanation:S.assessAns.a3why||""});
+  renderPanel();
+}
+
+/* ---- summary ---- */
+function renderSummary(box){
+  box.appendChild(el("div",{class:"eyebrow"},"Lesson complete"));
+  box.appendChild(el("h2",{class:"mtitle"},"Your lesson summary"));
+  const rows=STEPS.filter(s=>s.type==="check"||s.type==="mission").map(s=>{ const r=S.results[s.id]||{}; const a=(r.attempts||[]).length;
+    return `<tr><td>${esc(s.title)}</td><td>${s.type==="check"?"Theory":"Mission"}</td><td><span class="pill ${r.firstTry?"ok":"no"}">${r.firstTry?"First try":"Needed more tries"}</span></td><td class="mono">${a}</td></tr>`; }).join("");
+  const tb=el("div",{class:"tablebox"}); tb.style.maxHeight="none";
+  tb.innerHTML=`<table class="sumtable"><thead><tr><th>Step</th><th>Stage</th><th>Result</th><th>Attempts</th></tr></thead><tbody>${rows}</tbody></table>`;
+  box.appendChild(tb);
+  const a=S.results.assess; box.appendChild(el("p",{class:"brief"},`Transfer check on a new curve: <strong>${a?a.score:0} / 3</strong>.`));
+  box.appendChild(el("p",{class:"hintline"},"Use “Copy log as JSON” below to save your predictions, explanations and tutor messages."));
+  if(!S.completeLogged){ S.completeLogged=true; logEv("lesson_complete",{assessment:a?a.score:null}); }
+}
+
+/* ================= tutor ================= */
+const RULES=`You are the tutor in an interactive lesson on one-dimensional gradient descent for first- and second-year undergraduates. Update rule: x_{t+1} = x_t − η·f′(x_t). Your role depends on CONTEXT.stage:
+
+- explore: the student is exploring freely BEFORE seeing the formula and has asked you for help. Do not state the update rule and do not give parameter values. Ask what they notice, suggest one comparison to try (two learning rates, two starting points), or give a small hint.
+- theory: check understanding. For a wrong answer, follow the hint levels below. For a correct answer, ask them to justify it. When they submit an explanation, test the mechanism with one short follow-up question (for example: what would change if η doubled, or if they started on the other side).
+- missions: the student chooses x₀ and η to reach the global minimum. Read lastOutcome and failureCounts. Repeated divergence: ask about the size of an update compared with the distance to the minimum. Repeated local minimum: ask about the starting point and the shape of the curve (which side of the hump). Too slow: ask about step size compared with the distance left. Oscillation: ask about overshooting. Do not give working parameter values unless hintLevel is 3 or more.
+
+Hint levels (wrong answers or failed runs): 1 = one focused question pointing at evidence on screen; 2 = a concrete hint naming exactly what to compare or compute, without the final answer; 3 or more = explain directly in two or three sentences, then ask the student to restate it.
+When the student submits an explanation: compare it with keyIdea. If it captures it, confirm in one sentence and ask one short what-if question. If not, name the missing piece with a question, and explain briefly if needed.
+If the prediction was wrong but the run succeeded, point out the mismatch and ask what surprised them.
+Behaviour signals: if they re-ran identical settings, suggest changing one thing at a time; if they predicted within a few seconds, ask them to look at the curve first; if η jumped a lot, suggest smaller changes and predicting each one.
+Follow-up messages from the student: answer directly and briefly, then hand the reasoning back with a question.
+Style: at most 70 words, plain text, no markdown, no lists. Inline maths like x₁ = x₀ − η·f′(x₀). Warm but not gushing; never say "Great job". Reply in English.`;
+
+function ctxFor(st,kind,extra){
+  const L=S.last; const c=L?L.cfg:cfg();
+  const lab=v=>v==null?null:(typeof v==="number"?v:outLabel(v,st.fn));
+  const base={stage:st.stage, situation:kind, step:st.title, brief:st.brief, function:st.fn.label,
+    minima:st.fn.mins.map(m=>({x:+m.x.toFixed(3),global:m.global})), currentSettings:{x0:c.x0,eta:c.lr,steps:c.steps}, behaviourSignals:S.signals[st.id]||{}, studentText:extra||null};
+  if(st.type==="explore"){ base.explorationRuns=(S.runs.explore||[]).slice(-8).map(r=>({x0:r.x0,eta:r.lr,steps:r.steps,outcome:SHORT[r.out]})); return base; }
+  base.keyIdea=st.key; base.question=st.q?st.q.prompt:"Reach the global minimum"; if(st.tol) base.targetTolerance=st.tol;
+  if(L){ base.studentPrediction=lab(L.pred); base.studentReason=L.reason||null; base.lastOutcome=lab(L.actual); base.predictionCorrect=L.predOK; base.trajectory=L.xs.slice(0,10).map(x=>+fmt(x)); }
+  base.hintLevel = st.type==="mission" ? (L&&!L.success?(S.fails[st.id]||{})[L.out]||0:0) : (S.hintLevel[st.id]||0);
+  base.failureCounts=S.fails[st.id]||{}; base.attempts=(S.results[st.id]?.attempts||[]).slice(-5);
+  return base;
+}
+function pushMsg(st,who,text,cls){ const th=S.threads[st.id]||(S.threads[st.id]=[]); const o={who,text,cls}; th.push(o); return o; }
+function fixedFeedback(st,kind){
+  if(kind==="help"){ const h=EXPLORE_HINTS[S.exploreHint%EXPLORE_HINTS.length]; S.exploreHint++; return h; }
+  if(kind==="wrong"){ const lvl=Math.min(S.hintLevel[st.id]||1,3); return st.hints[lvl-1]; }
+  if(kind==="correct") return "Your answer is correct. Now explain why it happened.";
+  if(kind==="mission_fail"){ const out=S.last.out; const lvl=Math.min((S.fails[st.id]||{})[out]||1,3); return SCAFFOLD[out][lvl-1]; }
+  if(kind==="mission_success") return S.last.predOK===false ? "You reached the minimum, but your prediction was different. Explain what happened and what you expected." : "You reached the global minimum. Explain why these settings work.";
+  if(kind==="explain") return "Compare your explanation with this one: "+st.key;
+  return "";
+}
+async function tutorSay(st,kind,extra){
+  if(S.cond==="fixed" || !(hasEndpoint()||sampleFn) || S.aiOK===false){
+    const txt=fixedFeedback(st,kind); pushMsg(st,"t",txt); logEv("tutor",{mode:"predefined",kind,text:txt});
+    if(cur()===st) refreshThread(st); return;
+  }
+  const msg=pushMsg(st,"t","Thinking…","thinking"); if(cur()===st) refreshThread(st);
+  const th=S.threads[st.id].slice(0,-1).slice(-8).map(x=>`${x.who==="t"?"Tutor":"Student"}: ${x.text}`).join("\n");
+  const context=JSON.stringify(ctxFor(st,kind,extra));
+  if(hasEndpoint()){
+    try{
+      const r=await fetch(TUTOR_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({context,conversation:th})});
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok||!data.text) throw {code:r.status===429?"rate_limited":"upstream_error"};
+      msg.text=data.text; msg.cls=""; logEv("tutor",{mode:"ai",kind,text:data.text});
+    }catch(e){
+      const code=e&&e.code||"network";
+      msg.text=fixedFeedback(st,kind); msg.cls="";
+      msg.note = code==="rate_limited" ? "The AI tutor is busy, so this is a predefined hint." : "The AI tutor could not be reached, so this is a predefined hint.";
+      logEv("tutor",{mode:"fallback",kind,error:code,text:msg.text});
+    }
+    if(cur()===st) refreshThread(st); return;
+  }
+  const input=`${RULES}\n\nCONTEXT (JSON):\n${context}\n\nCONVERSATION SO FAR ON THIS STEP:\n${th||"(none)"}\n\nWrite the tutor's next message now.`;
+  try{
+    const {text}=await sampleFn(input,{modelTier:"quick",cache:false,onText:({text})=>{ msg.text=text; msg.cls=""; if(cur()===st) refreshThread(st); }});
+    msg.text=text; msg.cls=""; logEv("tutor",{mode:"ai",kind,text});
+  }catch(e){
+    const code=e&&e.code;
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(code)) S.aiOK=false;
+    msg.text=fixedFeedback(st,kind); msg.cls="";
+    msg.note = code==="rate_limited" ? "The AI tutor is busy, so this is a predefined hint." : "The AI tutor isn't available in this view, so this is a predefined hint.";
+    logEv("tutor",{mode:"fallback",kind,error:code||"unknown",text:msg.text});
+    if(S.aiOK===false){ renderPanel(); return; }
+  }
+  if(cur()===st) refreshThread(st);
+}
+function aiLive(){ return S.cond==="ai" && (hasEndpoint()||sampleFn) && S.aiOK!==false; }
+function fillThread(t,st){
+  t.innerHTML="";
+  const th=S.threads[st.id]||[];
+  if(!th.length){ t.appendChild(el("p",{class:"hintline"}, st.type==="explore" ? (aiLive()?"Stuck or curious? Ask the tutor, or press “I'm stuck”.":"Press “Get a hint” if you want a suggestion.") : "Feedback appears here after each attempt.")); return; }
+  for(const x of th){ const d=el("div",{class:"msg "+x.who+(x.cls?" "+x.cls:"")}); d.appendChild(el("span",{class:"who"},x.who==="t"?"Tutor":"You")); d.appendChild(document.createTextNode(x.text)); t.appendChild(d); if(x.note) t.appendChild(el("p",{class:"note"},esc(x.note))); }
+  t.scrollTop=t.scrollHeight;
+}
+function refreshThread(st){ const t=document.querySelector(".thread"); if(t) fillThread(t,st); else renderPanel(); }
+function tutorBox(st){
+  const w=el("div",{class:"tutor"});
+  const h=el("div",{class:"tutor-head"}); h.appendChild(el("span",{class:"label"},"Tutor"));
+  h.appendChild(el("span",{class:"badge"}, S.cond==="ai"?(aiLive()?"Adaptive AI":"Adaptive AI · unavailable here"):"Predefined support"));
+  w.appendChild(h);
+  const t=el("div",{class:"thread"}); w.appendChild(t); fillThread(t,st);
+  if(st.type==="explore"){
+    if(aiLive()){
+      const f=el("form",{class:"reply"}); const inp=el("input",{type:"text",id:"ask-"+st.id,placeholder:"Ask about what you see","aria-label":"Question for the tutor"});
+      const send=el("button",{class:"btn ghost",type:"submit"},"Ask"); const stuck=el("button",{class:"btn ghost",type:"button"},"I'm stuck");
+      f.addEventListener("submit",ev=>{ ev.preventDefault(); const v=inp.value.trim(); if(!v) return; inp.value=""; pushMsg(st,"s",v); logEv("help_request",{text:v}); tutorSay(st,"help",v); });
+      stuck.addEventListener("click",()=>{ pushMsg(st,"s","I'm stuck."); logEv("help_request",{text:"stuck"}); tutorSay(st,"help","I'm stuck, what should I try?"); });
+      f.append(inp,send,stuck); w.appendChild(f);
+    } else {
+      const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn ghost",onclick:()=>{ logEv("help_request",{text:"hint"}); tutorSay(st,"help"); }},"Get a hint")); w.appendChild(b);
+    }
+  } else if(aiLive() && (S.threads[st.id]||[]).length && S.phase!=="running"){
+    const f=el("form",{class:"reply"}); const inp=el("input",{type:"text",id:"reply-"+st.id,placeholder:"Answer the tutor or ask a question","aria-label":"Message to the tutor"}); const b=el("button",{class:"btn ghost",type:"submit"},"Send");
+    f.addEventListener("submit",ev=>{ ev.preventDefault(); const v=inp.value.trim(); if(!v) return; inp.value=""; pushMsg(st,"s",v); logEv("student_msg",{text:v}); tutorSay(st,"followup",v); });
+    f.append(inp,b); w.appendChild(f);
+  }
+  return w;
+}
+
+/* ================= flow ================= */
+function loadStep(){
+  clearInterval(S.anim);
+  const st=cur();
+  if(st){
+    const prevStage=S.log.length?S.log[S.log.length-1].stage:null;
+    ctl.x0.min=(st.x0Range||[-4.5,4.5])[0]; ctl.x0.max=(st.x0Range||[-4.5,4.5])[1];
+    ctl.x0.value=st.cfg.x0; ctl.lr.value=st.cfg.lr; ctl.steps.value=st.cfg.steps; syncOutputs();
+    S.signals[st.id]=S.signals[st.id]||{}; S.signals[st.id].shownAt=Date.now(); S.signals[st.id].firstPredAt=null;
+    S.threads[st.id]=S.threads[st.id]||[];
+    S.phase="setup"; S.pred=null; S.reason=""; S.last=null; S.draft=""; S.xs=null; S.shown=1; S.ruleSeen=1;
+    logEv("step_start",{stage:st.stage});
+  }
+  renderPanel(); draw(); renderTable();
+}
+function next(){
+  const prev=cur(); S.i++; const nx=cur();
+  if(!nx || nx.stage!==prev.stage) S.stageStart=Date.now();
+  loadStep();
+}
+function setCond(c){ S.cond=c; $("condAI").setAttribute("aria-pressed",String(c==="ai")); $("condFixed").setAttribute("aria-pressed",String(c==="fixed")); store.set("gdlab-cond",c); logEv("condition",{cond:c}); renderPanel(); }
+$("condAI").addEventListener("click",()=>setCond("ai"));
+$("condFixed").addEventListener("click",()=>setCond("fixed"));
+$("copyLog").addEventListener("click",async ev=>{ const btn=ev.currentTarget; const txt=JSON.stringify(S.log,null,2);
+  try{ await navigator.clipboard.writeText(txt); btn.textContent="Copied"; }
+  catch(e){ let ta=document.querySelector(".logbox"); if(!ta){ ta=el("textarea",{class:"logbox","aria-label":"Event log"}); document.querySelector("footer").after(ta); } ta.value=txt; ta.select(); btn.textContent="Select and copy below"; }
+  setTimeout(()=>btn.textContent="Copy log as JSON",2200); });
+$("restart").addEventListener("click",()=>{ Object.assign(S,{i:0,results:{},threads:{},hintLevel:{},fails:{},signals:{},runs:{},exploreHint:0,assessAns:{},assessDone:false,stageStart:Date.now(),lastRunCfg:null,completeLogged:false}); logEv("restart",{}); loadStep(); });
+
+const saved=store.get("gdlab-cond"); if(saved==="ai"||saved==="fixed") S.cond=saved;
+$("condAI").setAttribute("aria-pressed",String(S.cond==="ai")); $("condFixed").setAttribute("aria-pressed",String(S.cond==="fixed"));
+loadStep();
+(async()=>{ try{ if(window.claude&&window.claude.use) sampleFn=await window.claude.use("sample"); }catch(e){ sampleFn=null; } renderPanel(); })();
+})();
+</script>
+
+</body></html>
