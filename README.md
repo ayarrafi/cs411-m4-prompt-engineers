@@ -1,22 +1,27 @@
 # CS-411 M4 – Prompt Engineers
 
-Team project for CS-411 Digital Education: a short interactive lesson on 1D gradient descent, with two support conditions (adaptive AI tutor vs. predefined hints), and the study we run around it.
+Team project for CS-411 Digital Education: an interactive lesson on 1D gradient descent and a controlled comparison of adaptive AI tutoring with predefined support.
 
 Team: Aya Arrafi, Marc Kallergis, Clemens Möbius
 
+## Run the study application
+
+```sh
+cd activity
+node server.mjs
+```
+
+Open `http://127.0.0.1:8080/?condition=control&pid=P01`. For AI, use `condition=ai` and configure the server-side relay first. Both conditions use the same consent, official tests, four-stage lesson, feedback, and exports. Participants cannot switch conditions through the interface.
+
+See [activity/README.md](activity/README.md) for deployment, AI configuration, timing/assignment limitations, research data formats, blinded manual grading, test commands, and researcher decisions needed before recruitment.
+
 ## Repository layout
 
-- `activity/gradient-descent-lab.html`: the lesson (single HTML file, M3 version). It has four stages (Explore, Theory, Missions, Transfer check), and the switch at the top right sets the condition (Adaptive AI or Predefined).
-- `tests/`: pre-test, post-test and answer key (to add).
-- `logs/`: AI interaction logs, one folder per team member (to add).
-- `report/`: research plan as PDF (to add).
+- `activity/gradient-descent-lab.html`: original visual shell and canvas, now loaded with separate scripts.
+- `activity/lesson.js` and `math.js`: retained lesson, plots, missions, and numerical calculations.
+- `activity/study.js`, `study-core.js`, `study.css`: study progression, assessments, scoring, timers, recovery, and exports.
+- `activity/server.mjs`, `tutor-provider.mjs`, `tutor-instructions.txt`: authenticated same-origin AI relay and pedagogical instructions. Provider API keys stay in server environment variables.
+- `activity/grade.mjs`: offline blinded review/manual grading utility.
+- `activity/tests/`: Node regression tests and Chrome/Playwright participant-flow tests.
 
-## About the lesson file
-
-The adaptive AI tutor in this file uses Claude's in-page `sample` capability, so it only works when the page is opened inside Claude (as a shared artifact link). Outside Claude the page still works, with the predefined hints as fallback.
-
-To use the tutor on a public site, the page has a `TUTOR_ENDPOINT` constant near the top of the script. It is empty here on purpose: put the address of a relay that keeps the API key secret, never the key itself in this repo.
-
-## Event log
-
-Every prediction, explanation, tutor message and the transfer score is logged. The button "Copy log as JSON" at the bottom of the page exports the log for one participant.
+Participant JSON, summary CSV, and event CSV are downloaded locally. There is no research collection backend; the team must provide a secure delivery channel. Do not commit research exports or credentials to this repository.
