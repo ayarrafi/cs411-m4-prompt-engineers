@@ -44,8 +44,8 @@ const STEPS=[
  {id:"rule", stage:"theory", type:"rule", title:"The update rule", fn:BOWL, cfg:{x0:3,lr:0.2,steps:6}, free:[],
   brief:"Everything you just tried is one line of maths. Step through a run and watch each part of the rule fill in."},
  {id:"t1", stage:"theory", type:"check", title:"Compute one update", fn:SHIFT, cfg:{x0:5,lr:0.1,steps:1}, free:[], x0Range:[-3.5,5.5],
-  brief:"A new curve with its minimum at x = 1. Use the rule to compute the first step by hand, then run it to check.",
-  q:{type:"number", prompt:"What is x₁? (two decimals)"},
+  brief:"Start at x₀ = 5 with learning rate η = 0.1. The minimum of this curve is at x = 1 — this is the target. Calculate one update, then run it to check.",
+  q:{type:"number", prompt:"Starting from x₀ = 5 with η = 0.1, what is x₁? (two decimals)"},
   answer:(fn,xs)=>xs[1], check:(p,a)=>Math.abs(p-a)<0.011,
   explainPrompt:"Why did x move to the left, toward 1?",
   key:"f′(5) = 2·(5 − 1) = 8 is positive, so −η·f′ is negative and x decreases: x₁ = 5 − 0.1·8 = 4.2. The minus sign makes the step go against the slope, which is downhill.",
@@ -74,10 +74,12 @@ const STEPS=[
 ];
 const ASSESS_Q=[
  {id:"a1", type:"number", prompt:"Start at x₀ = 6 with η = 0.5. What is x₁?", answer:4, check:(p)=>Math.abs(p-4)<0.011, why:"f′(6) = 6 − 2 = 4, so x₁ = 6 − 0.5·4 = 4."},
- {id:"a2", type:"choice", prompt:"From x₀ = 6 with η = 0.5 the ball reaches the minimum. What happens if η is changed to 2.5 (10 steps)?",
+ {id:"a2", type:"choice", prompt:"Now use η = 2.5, starting at x₀ = 6. The first positions are 6 → −4 → 11; the minimum is at x = 2. What behavior do you expect if this pattern continues over 10 steps?",
+  guidance:"Compare how far each position is from x = 2. You do not need to calculate all 10 updates. The main plot shows Q3, not this run.",
   options:[{id:"global",label:"It still reaches the minimum, just faster"},{id:"oscillate",label:"It zig-zags and doesn't settle in time"},{id:"slow",label:"It heads the right way but doesn't arrive in time"},{id:"diverge",label:"It overshoots more and more (diverges)"}],
   answer:"diverge", why:"Each step multiplies the distance to x = 2 by (1 − η) = −1.5: the sign flips and the error grows by 50% every step."},
- {id:"a3", type:"choice", prompt:"The plot shows a run from x₀ = 6 with η = 1.8 and 10 steps. Diagnose it.",
+ {id:"a3", type:"choice", prompt:"For η = 1.8, use the plot and the selected rows below. Does this run reach within 0.05 of the minimum at x = 2 after 10 steps, or show another behavior?",
+  guidance:"Look at which side of x = 2 each point lies on and how its distance changes. Read the last row to check the target; no mental simulation is needed.",
   options:outOptions(NEWFN), answer:"oscillate", why:"Each step multiplies the distance by (1 − 1.8) = −0.8: it overshoots every time and shrinks only 20% per step, so after 10 steps it is still about 0.4 away."}
 ];
 
@@ -376,6 +378,13 @@ function renderAssess(box,st){
   $("plotcap").hidden=false; $("plotcap").textContent="Plot and table: the run for question 3 (x₀ = 6, η = 1.8, 10 steps).";
   ASSESS_Q.forEach((q,qi)=>{
     const w=el("div",{class:"q"}); w.appendChild(el("div",{class:"prompt"},`<span class="qnum">Q${qi+1}</span>${esc(q.prompt)}`));
+    if(q.guidance) w.appendChild(el("p",{class:"hintline"},esc(q.guidance)));
+    if(q.id==="a3"){
+      const rows=[0,1,2,9,10].map(t=>`<tr><td>${t}</td><td>${fmt(S.xs[t])}</td><td>${fmt(Math.abs(S.xs[t]-2))}</td></tr>`).join("");
+      const table=el("div",{class:"tablebox"});
+      table.innerHTML=`<table><caption>Q3 evidence · x₀ = 6, η = 1.8</caption><thead><tr><th scope="col">Step</th><th scope="col">Position x</th><th scope="col">Distance from 2</th></tr></thead><tbody>${rows}</tbody></table>`;
+      w.appendChild(table);
+    }
     const ans=S.assessAns[q.id];
     if(q.type==="number"){ const row=el("div",{class:"numrow"}); const inp=el("input",{type:"number",step:"0.01",id:"as-"+q.id,"aria-label":"Answer to question "+(qi+1)}); if(ans?.v!=null) inp.value=ans.v; inp.disabled=S.assessDone;
       inp.addEventListener("input",()=>{ S.assessAns[q.id]={v:inp.value===""?null:+inp.value}; updateSubmit(); }); row.appendChild(el("span",{class:"mono"},"x₁ =")); row.appendChild(inp);

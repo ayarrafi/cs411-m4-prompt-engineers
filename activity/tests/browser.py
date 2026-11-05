@@ -35,6 +35,7 @@ try:
    page.get_by_role('button',name='Continue to the theory').click()
    for _ in range(2):page.get_by_role('button',name='Next step',exact=True).click()
    page.get_by_role('button',name='Check my understanding').click()
+   assert 'Start at x₀ = 5 with learning rate η = 0.1' in page.locator('#panel').inner_text()
    if condition=='control':assert not page.get_by_text('Predefined hint 3',exact=True).count()
    page.locator('#num-t1').fill('9');page.locator('#runBtn').click()
    if condition=='control':assert page.get_by_text('Predefined hint 3',exact=True).count()==1
@@ -45,10 +46,15 @@ try:
     slider(page,'lr',rate)
     if x is not None:slider(page,'x0',x)
     page.locator(f'[name=pred-{mission}][value=global]').check();page.locator('#runBtn').click();explain(page);page.get_by_role('button',name='Go to the transfer check' if mission=='m4' else 'Next mission',exact=True).click()
+   assert '6 → −4 → 11' in page.locator('#panel').inner_text();assert page.get_by_role('table').filter(has_text='Q3 evidence').count()==1
    page.locator('#as-a1').fill('4');page.locator('[name=as-a2][value=diverge]').check();page.locator('[name=as-a3][value=oscillate]').check();page.locator('#as-why').fill('The distance shrinks while alternating sides.');page.get_by_role('button',name='Submit answers',exact=True).click();page.get_by_role('button',name='See lesson summary').click()
    page.get_by_role('button',name='Begin post-test').wait_for();assert not page.locator('#lesson').is_visible();page.get_by_role('button',name='Begin post-test').click();before=len(requests);assessment(page,True);assert len(requests)==before
    for name in ['helped','difficult','decision']:page.locator('#'+name).fill('  A specific example\nwith whitespace.  ')
-   page.locator('[name=assistance][value=No]').check();page.get_by_role('button',name='Finalize feedback and finish').click();page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for()
+   page.locator('[name=assistance][value=No]').check()
+   with page.expect_download() as automatic:page.get_by_role('button',name='Finalize feedback and finish').click()
+   auto_data=json.loads(Path(automatic.value.path()).read_text());assert auto_data['phase']=='complete';assert auto_data['automaticExportRequestedAt'];assert auto_data['feedback']['assistance']=='No'
+   page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for()
+   repeated=[];page.on('download',lambda download:repeated.append(download));page.reload();page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for();assert not repeated
    for kind in ['participant','summary','events']:
     with page.expect_download() as dl:page.locator('[data-export='+kind+']').click()
     contents=Path(dl.value.path()).read_text();assert contents
