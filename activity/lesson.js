@@ -433,13 +433,13 @@ function renderSummary(box){
 /* ================= tutor ================= */
 
 function ctxFor(st,kind,extra){
-  const L=S.last; const c=L?L.cfg:cfg();
+  const L=S.last; const c=cfg();
   const lab=v=>v==null?null:(typeof v==="number"?v:outLabel(v,st.fn));
   const base={stage:st.stage, situation:kind, step:st.title, brief:st.brief, function:st.fn.label,
     minima:st.fn.mins.map(m=>({x:+m.x.toFixed(3),global:m.global})), currentSettings:{x0:c.x0,eta:c.lr,steps:c.steps}, behaviourSignals:S.signals[st.id]||{}, studentText:extra||null};
   if(st.type==="explore"){ base.explorationRuns=(S.runs.explore||[]).slice(-8).map(r=>({x0:r.x0,eta:r.lr,steps:r.steps,outcome:SHORT[r.out]})); return base; }
   base.keyIdea=st.key; base.question=st.q?st.q.prompt:"Reach the global minimum"; if(st.tol) base.targetTolerance=st.tol;
-  if(L){ base.studentPrediction=lab(L.pred); base.studentReason=L.reason||null; base.lastOutcome=lab(L.actual); base.predictionCorrect=L.predOK; base.trajectory=L.xs.slice(0,10).map(x=>+fmt(x)); }
+  if(L){ base.lastSettings={x0:L.cfg.x0,eta:L.cfg.lr,steps:L.cfg.steps}; base.studentPrediction=lab(L.pred); base.studentReason=L.reason||null; base.lastOutcome=lab(L.actual); base.predictionCorrect=L.predOK; base.trajectory=L.xs.slice(0,10).map(x=>+fmt(x)); }
   base.hintLevel = st.type==="mission" ? (L&&!L.success?(S.fails[st.id]||{})[L.out]||0:0) : (S.hintLevel[st.id]||0);
   base.failureCounts=S.fails[st.id]||{}; base.attempts=(S.results[st.id]?.attempts||[]).slice(-5);
   return base;
@@ -464,7 +464,7 @@ async function tutorSay(st,kind,extra){
   if(requestController){tutorQueue.push({st,kind,extra});logEv("tutor_request_queued",{kind});return;}
   const msg=pushMsg(st,"t","Thinking…","thinking"); refreshThread(st);
   const context=ctxFor(st,kind,extra);
-  const conversation=(S.threads[st.id]||[]).slice(0,-1).slice(-8).map(x=>({role:x.who==="t"?"assistant":"user",content:x.text}));
+  const conversation=(S.threads[st.id]||[]).slice(0,-1).filter(x=>x.cls!=="thinking"&&!x.unavailable).slice(-4).map(x=>({role:x.who==="t"?"assistant":"user",content:x.text.slice(0,400)}));
   const controller=new AbortController(); requestController=controller;
   const timeout=setTimeout(()=>controller.abort(),25000);
   logEv("tutor_request",{kind,context});
@@ -472,13 +472,13 @@ async function tutorSay(st,kind,extra){
     const response=await fetch("/api/tutor",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,
       body:JSON.stringify({context,conversation,token:window.Study.tutorToken()})});
     const data=await response.json();
-    if(!response.ok || typeof data.text!=="string" || !data.text.trim()) throw new Error("service_unavailable");
+    if(!response.ok || typeof data.text!=="string" || !data.text.trim()){const error=new Error("service_unavailable");error.code=data.error;error.provider=data.provider;error.model=data.model;throw error;}
     if(!window.Study.isLearning()) { logEv("tutor_response_discarded",{kind}); return; }
     msg.text=data.text; msg.cls=""; S.aiOK=true;
-    logEv("tutor",{mode:"ai",kind,text:data.text});
+    logEv("tutor",{mode:"ai",kind,text:data.text,provider:data.provider||null,model:data.model||null,available:true,usage:data.usage||null,reasoningEffort:data.reasoningEffort||null});
   }catch(error){
-    msg.text="AI assistance is unavailable. No predefined hint has been substituted. Use Retry AI assistance below."; msg.cls=""; S.aiOK=false;
-    logEv("tutor",{mode:"unavailable",kind,error:error.name==="AbortError"?"timeout_or_phase_end":"service_unavailable",fallback:false});
+    msg.text=error.code==="provider_rate_limited"?"The AI provider’s request limit was reached. Wait a minute, then retry; a daily limit may require waiting longer. No predefined hint has been substituted.":"AI assistance is unavailable. No predefined hint has been substituted. Use Retry AI assistance below."; msg.cls=""; msg.unavailable=true; S.aiOK=false;
+    logEv("tutor",{mode:"unavailable",kind,error:error.name==="AbortError"?"timeout_or_phase_end":error.code||"service_unavailable",provider:error.provider||null,model:error.model||null,available:false,fallback:false});
   }finally{
     clearTimeout(timeout); requestController=null;
     if(window.Study.isLearning() && cur()===st) renderPanel();

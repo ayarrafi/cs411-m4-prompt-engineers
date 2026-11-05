@@ -28,3 +28,31 @@ test('unconfigured service and upstream failures are explicit, never fixed hints
     }finally{await new Promise(r=>server.close(r));}
   }
 });
+test('Groq adapter sends context with server key and returns only the final answer',async()=>{
+  const text=await generateTutor({providerName:'groq',context:{stage:'missions',hintLevel:1},conversation:[{role:'user',content:'Help'}],instructions:'tutor rules',apiKey:'private-test-key',model:'qwen/qwen3.8-27b',fetchImpl:async(url,options)=>{
+    assert.equal(url,'https://api.groq.com/openai/v1/chat/completions');assert.equal(options.headers.Authorization,'Bearer private-test-key');
+    const body=JSON.parse(options.body);assert.equal(body.reasoning_format,'hidden');assert.equal(body.messages[0].content,'tutor rules');assert.equal(JSON.parse(body.messages[1].content).context.hintLevel,1);assert.ok(!options.body.includes('private-test-key'));
+    return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:'What does the plot show?',reasoning:'Not student-facing'}}]})};
+  }});assert.equal(text,'What does the plot show?');
+});
+test('Groq failures are sanitized and incomplete/empty responses rejected',async()=>{
+  const base={providerName:'groq',context:{stage:'theory'},conversation:[],instructions:'rules',apiKey:'secret',model:'qwen/qwen3.8-27b'};
+  for(const [status,code] of [[429,'provider_rate_limited'],[401,'provider_auth_error'],[404,'provider_configuration_error'],[500,'provider_error']]){
+    await assert.rejects(generateTutor({...base,fetchImpl:async()=>({ok:false,status,json:()=>{throw new Error('must not read provider error body');}})}),e=>e.code===code);
+  }
+  for(const choice of [{message:{content:''}},{finish_reason:'length',message:{content:'Partial answer'}},{message:{content:'<think>reasoning</think>Answer'}}]){
+    await assert.rejects(generateTutor({...base,fetchImpl:async()=>({ok:true,json:async()=>({choices:[choice]})})}));
+  }
+});
+test('Groq-only configuration works; credentials are not served; rate limits remain explicit',async()=>{
+  const server=createServer({env:{TUTOR_PROVIDER:'groq',GROQ_API_KEY:'private-key',TUTOR_MODEL:'qwen/qwen3.8-27b',APP_ORIGIN:'http://study.test',STUDY_AI_TOKENS:'code'},provider:async args=>{
+    assert.equal(args.providerName,'groq');assert.equal(args.apiKey,'private-key');return 'Compare the first step.';
+  }});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}`;
+  try{
+    for(const file of ['.env','.env.example','tutor-provider.mjs','test-tutor.mjs'])assert.equal((await fetch(url+'/'+file)).status,404);
+    const r=await fetch(url+'/api/tutor',{method:'POST',headers:{Origin:'http://study.test','Content-Type':'application/json'},body:JSON.stringify({token:'code',context:{stage:'theory'},conversation:[]})});
+    assert.equal(r.status,200);const data=await r.json();assert.equal(data.text,'Compare the first step.');assert.equal(data.provider,'groq');assert.equal(data.model,'qwen/qwen3.8-27b');assert.equal(data.available,true);assert.equal(data.reasoningEffort,'none');
+  }finally{await new Promise(r=>server.close(r));}
+  assert.throws(()=>createServer({env:{TUTOR_PROVIDER:'typo'}}),/TUTOR_PROVIDER/);
+});

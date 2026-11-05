@@ -24,7 +24,7 @@ try:
   for condition in ['control','ai']:
    ctx=browser.new_context(reduced_motion='reduce');page=ctx.new_page();errors=[];requests=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
    def mock(route):
-    requests.append(route.request.post_data_json);route.fulfill(status=200,content_type='application/json',body=json.dumps({'text':'Compare the first two rows of the table.'}))
+    requests.append(route.request.post_data_json);route.fulfill(status=200,content_type='application/json',body=json.dumps({'text':'Compare the first two rows of the table.','provider':'groq','model':'qwen/qwen3.8-27b'}))
    page.route('**/api/tutor',mock);consent(page,condition);assert not page.locator('#lesson').is_visible()
    page.locator('#q5').fill(' draft\n preserved ');page.reload();assert page.locator('#q5').input_value()==' draft\n preserved '
    assessment(page);page.locator('#runBtn').wait_for();assert not page.locator('#condAI').count()
@@ -61,6 +61,7 @@ try:
     if kind=='participant':
      data=json.loads(contents);assert data['tests']['pre']['score']['objectiveTotal']==4;assert data['tests']['pre']['score']['total'] is None;assert data['gains']['raw'] is None
      assert data['tests']['post']['answers']['q5'].startswith('  ');assert data['lesson']['state']['results']['t1']['explanation'].endswith('  ');assert data['learningStatus']=='completed';assert not data['incompleteSteps']
+     if condition=='ai':assert any(e.get('ev')=='tutor' and e.get('provider')=='groq' and e.get('model')=='qwen/qwen3.8-27b' for e in data['lesson']['state']['log'])
    assert (len(requests)>0)==(condition=='ai');assert not errors,errors
    page.goto(BASE+'/?condition='+('ai' if condition=='control' else 'control'));page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for();assert state(page)['condition']==condition
    print('PASS full flow, recovery, scoring, exports, isolation:',condition);ctx.close()
