@@ -40,7 +40,7 @@ try:
    page.locator('#num-t1').fill('9');page.locator('#runBtn').click()
    if condition=='control':assert page.get_by_text('Predefined hint 3',exact=True).count()==1
    page.get_by_role('button',name='Try again').click()
-   page.locator('#num-t1').fill('4.2');page.locator('#runBtn').click();explain(page);page.get_by_role('button',name='Continue',exact=True).click()
+   assert 'x₀ = −1' in page.locator('#panel').inner_text();page.locator('#num-t1').fill('0.2');page.locator('#runBtn').click();explain(page);page.get_by_role('button',name='Continue',exact=True).click()
    page.locator('[name=pred-t2][value=oscillate]').check();page.locator('#runBtn').click();explain(page);page.get_by_role('button',name='Continue',exact=True).click()
    for mission,rate,x in [('m1',.5,None),('m2',.12,None),('m3',.2,-1),('m4',1,1)]:
     slider(page,'lr',rate)

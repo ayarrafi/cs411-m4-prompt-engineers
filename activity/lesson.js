@@ -38,19 +38,51 @@ const SCAFFOLD={
          "Small enough gradient descent steps move downhill from where they start. On which side of the hump would you have to start to roll into the deeper valley?",
          "The start is on the slope of the shallow valley, so small downhill steps can never leave it. Move x₀ to the left of the hump (around x = 0.3) and run again."]
 };
+/* Theory checks: after a wrong answer, "Try again" serves a fresh variant with new numbers,
+   so a student cannot simply copy the revealed answer. Variant 0 is the original step. */
+const num=v=>String(+v.toFixed(3)).replace("-","−");
+const T1_SETS=[[5,0.1],[-1,0.3],[3,0.3],[-2,0.4]];
+function t1Variant(k){
+  const [x0,lr]=T1_SETS[k%T1_SETS.length]; const g=2*(x0-1), step=lr*g, x1=x0-step; const left=g>0;
+  return {
+    cfg:{x0,lr,steps:1},
+    brief:`New numbers this time, same rule. Start at x₀ = ${num(x0)} with learning rate η = ${num(lr)}. The minimum of this curve is at x = 1 — this is the target. Calculate one update, then run it to check.`,
+    q:{type:"number", prompt:`Starting from x₀ = ${num(x0)} with η = ${num(lr)}, what is x₁? (two decimals)`},
+    explainPrompt:`Why did x move to the ${left?"left":"right"}, toward 1?`,
+    key:`f′(${num(x0)}) = 2·(${num(x0)} − 1) = ${num(g)} is ${left?"positive":"negative"}, so −η·f′ is ${left?"negative":"positive"} and x ${left?"decreases":"increases"}: x₁ = ${num(x0)} − ${num(lr)}·(${num(g)}) = ${num(x1)}. The minus sign makes the step go against the slope, which is downhill.`,
+    hints:[`Start with the slope at x₀ = ${num(x0)}. What is f′(${num(x0)}) for this curve?`,`f′(${num(x0)}) = 2·(${num(x0)} − 1). Multiply it by η = ${num(lr)}, then subtract the result from x₀.`,`f′(${num(x0)}) = ${num(g)}, so η·f′ = ${num(step)} and x₁ = ${num(x0)} − (${num(step)}) = ${num(x1)}.`]
+  };
+}
+const T2_SETS=[[-2,0.9,10],[3,1.1,8],[2.5,0.05,8],[-3,0.4,10]];
+function t2Variant(k){
+  const [x0,lr,steps]=T2_SETS[k%T2_SETS.length]; const xs=trajectory(BOWL,x0,lr,steps), out=outcome(BOWL,xs,0.05);
+  const f=1-2*lr, x1=xs[1], xN=xs[steps];
+  const tail={
+    oscillate:`|factor| is below 1 but the factor is negative, so x flips side every step and shrinks only slowly; after ${steps} steps it is still about ${num(Math.abs(xN))} away.`,
+    diverge:`|factor| is above 1, so each step lands farther from the minimum than the last; x keeps flipping side and grows (about ${num(Math.abs(xN))} after ${steps} steps).`,
+    slow:`the factor is positive and close to 1, so x creeps toward 0 without flipping; after ${steps} steps it is still about ${num(Math.abs(xN))} away.`,
+    global:`the factor is small and positive, so x shrinks fast and is within 0.05 of the minimum well before step ${steps}.`
+  }[out];
+  return {
+    cfg:{x0,lr,steps},
+    brief:`New numbers this time. Back to f(x) = x², now starting at x₀ = ${num(x0)} with η = ${num(lr)} and ${steps} steps. Predict first, then run.`,
+    key:`f′(${num(x0)}) = ${num(2*x0)}, so the first step is −${num(lr)}·(${num(2*x0)}) = ${num(-lr*2*x0)}: x₁ = ${num(x1)}. Each step multiplies x by 1 − 2η = ${num(f)}, so ${tail}`,
+    hints:[`Compute the first step: f′(${num(x0)}) = ${num(2*x0)}. How far does η·f′ move x, and where does it land?`,`x₁ = ${num(x0)} − ${num(lr)}·(${num(2*x0)}) = ${num(x1)}. Is that closer to 0 than x₀ was? What will the next step do?`,`Each step multiplies x by (1 − 2·${num(lr)}) = ${num(f)}. Is that factor negative (side flips)? Is its size below or above 1? Here ${tail}`]
+  };
+}
 const STEPS=[
  {id:"explore", stage:"explore", type:"explore", title:"Play with the ball", fn:BOWL, cfg:{x0:3,lr:0.1,steps:10}, free:["x0","lr","steps"], x0Range:[-4.5,4.5],
   brief:"A ball sits on a loss curve. Each run, an algorithm moves it step by step. Change the start, the learning rate η and the number of steps, run it, and compare what happens. No formulas yet."},
  {id:"rule", stage:"theory", type:"rule", title:"The update rule", fn:BOWL, cfg:{x0:3,lr:0.2,steps:6}, free:[],
   brief:"Everything you just tried is one line of maths. Step through a run and watch each part of the rule fill in."},
- {id:"t1", stage:"theory", type:"check", title:"Compute one update", fn:SHIFT, cfg:{x0:5,lr:0.1,steps:1}, free:[], x0Range:[-3.5,5.5],
+ {id:"t1", variant:t1Variant, stage:"theory", type:"check", title:"Compute one update", fn:SHIFT, cfg:{x0:5,lr:0.1,steps:1}, free:[], x0Range:[-3.5,5.5],
   brief:"Start at x₀ = 5 with learning rate η = 0.1. The minimum of this curve is at x = 1 — this is the target. Calculate one update, then run it to check.",
   q:{type:"number", prompt:"Starting from x₀ = 5 with η = 0.1, what is x₁? (two decimals)"},
   answer:(fn,xs)=>xs[1], check:(p,a)=>Math.abs(p-a)<0.011,
   explainPrompt:"Why did x move to the left, toward 1?",
   key:"f′(5) = 2·(5 − 1) = 8 is positive, so −η·f′ is negative and x decreases: x₁ = 5 − 0.1·8 = 4.2. The minus sign makes the step go against the slope, which is downhill.",
   hints:["Start with the slope at x₀ = 5. What is f′(5) for this curve?","f′(5) = 2·(5 − 1). Multiply it by η = 0.1, then subtract the result from x₀.","f′(5) = 8, so η·f′ = 0.8 and x₁ = 5 − 0.8 = 4.2."]},
- {id:"t2", stage:"theory", type:"check", title:"Predict a large step", fn:BOWL, cfg:{x0:-2,lr:0.9,steps:10}, free:[],
+ {id:"t2", variant:t2Variant, stage:"theory", type:"check", title:"Predict a large step", fn:BOWL, cfg:{x0:-2,lr:0.9,steps:10}, free:[],
   brief:"Back to f(x) = x², now starting at x₀ = −2 with a large learning rate η = 0.9 and 10 steps. Predict first, then run.",
   q:{type:"choice", prompt:"What will the path do?"}, tol:0.05,
   answer:(fn,xs,st)=>outcome(fn,xs,st.tol), check:(p,a)=>p===a,
@@ -85,11 +117,13 @@ const ASSESS_Q=[
 
 /* ================= state ================= */
 const S={i:0, phase:"setup", cond:"ai", pred:null, reason:"", xs:null, shown:1, anim:null, last:null,
-  results:{}, threads:{}, hintLevel:{}, fails:{}, signals:{}, runs:{}, log:[], draft:"", ruleSeen:1,
+  results:{}, variant:{}, threads:{}, hintLevel:{}, fails:{}, signals:{}, runs:{}, log:[], draft:"", ruleSeen:1,
   exploreHint:0, assessAns:{}, assessDone:false, stageStart:Date.now(), aiOK:null, lastRunCfg:null, completeLogged:false};
 const $=id=>document.getElementById(id);
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-const cur=()=>STEPS[S.i];
+const variantCache={};
+function stepAt(i){ const b=STEPS[i]; const k=b&&b.variant?(S.variant[b.id]||0):0; if(!k) return b; const key=b.id+":"+k; return variantCache[key]||(variantCache[key]={...b,...b.variant(k)}); }
+const cur=()=>stepAt(S.i);
 function logEv(ev,data){ S.log.push({t:new Date().toISOString(),cond:S.cond,step:cur()?cur().id:"end",ev,...data}); $("foot").textContent=`Event log: ${S.log.length} entries.`; window.Study?.lessonEvent(S.log[S.log.length-1]); }
 function el(tag,attrs={},html){ const e=document.createElement(tag); for(const k in attrs){ if(k==="class") e.className=attrs[k]; else if(k.startsWith("on")) e.addEventListener(k.slice(2),attrs[k]); else e.setAttribute(k,attrs[k]); } if(html!=null) e.innerHTML=html; return e; }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -293,11 +327,14 @@ function renderCheck(box,st){
   if(S.phase==="setup"){ const b=el("div",{class:"btns"}); const rb=el("button",{class:"btn",id:"runBtn"},"Lock in & run"); rb.disabled=S.pred==null; rb.addEventListener("click",checkRun); b.appendChild(rb); box.appendChild(b); }
   if(S.last && ["wrong","explain","done"].includes(S.phase)) box.appendChild(outcomeCard(st,S.last));
   if(S.phase==="wrong"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:resetAttempt},"Try again")); box.appendChild(b); }
-  if(S.phase==="explain") explainUI(box,st);
-  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},"Continue")); box.appendChild(b); }
+  
   box.appendChild(tutorBox(st));
+  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},"Continue")); box.appendChild(b); }
 }
-function resetAttempt(){ const st=cur(); S.phase="setup"; S.pred=null; S.reason=""; S.xs=null; S.shown=1; if(S.signals[st.id]){ S.signals[st.id].firstPredAt=null; S.signals[st.id].shownAt=Date.now(); } renderPanel(); draw(); renderTable(); }
+function resetAttempt(){
+  const base=STEPS[S.i];
+  if(base.variant){ S.variant[base.id]=(S.variant[base.id]||0)+1; const ns=cur(); applyCfg(ns); logEv("variant_change",{variant:S.variant[base.id],cfg:ns.cfg}); }
+  const st=cur(); S.phase="setup"; S.pred=null; S.reason=""; S.xs=null; S.shown=1; if(S.signals[st.id]){ S.signals[st.id].firstPredAt=null; S.signals[st.id].shownAt=Date.now(); } renderPanel(); draw(); renderTable(); }
 function signalsFor(st,c){
   const sg=S.signals[st.id];
   sg.runs=(sg.runs||0)+1;
@@ -321,13 +358,17 @@ function checkRun(){
   });
 }
 function explainUI(box,st){
-  const ex=el("div",{class:"q"}); ex.appendChild(el("label",{class:"prompt",for:"exp-"+st.id},esc(st.explainPrompt||"Explain in your own words why this happened.")));
+  const ex=el("div",{class:"q explain"}); ex.appendChild(el("label",{class:"msg t",for:"exp-"+st.id},'<span class="who">Tutor</span>'+esc(st.explainPrompt||"Explain in your own words why this happened.")));
   const ta=el("textarea",{id:"exp-"+st.id,placeholder:"One or two sentences. Use the plot and the table."}); ta.value=S.draft; ex.appendChild(ta);
   const b=el("div",{class:"btns"}); const sb=el("button",{class:"btn"},"Submit explanation"); sb.disabled=ta.value.trim().length<12;
   ta.addEventListener("input",()=>{ S.draft=ta.value; sb.disabled=ta.value.trim().length<12; });
   sb.addEventListener("click",()=>{ const text=ta.value; S.results[st.id].explanation=text; S.results[st.id].done=true; logEv("explanation",{text}); pushMsg(st,"s",text); S.phase="done"; S.draft=""; tutorSay(st,"explain",text); renderPanel(); });
   b.appendChild(sb); ex.appendChild(b); box.appendChild(ex);
+  // Bring the box into view (and focus it) once when the explanation begins, so it never sits below the fold.
+  const key=st.id+":"+(S.variant[st.id]||0)+":"+(S.results[st.id]?.attempts||[]).length;
+  if(lastExplainKey!==key){ lastExplainKey=key; requestAnimationFrame(()=>{ ex.scrollIntoView({block:"center",behavior:"smooth"}); ta.focus({preventScroll:true}); }); }
 }
+let lastExplainKey=null;
 function outcomeCard(st,last){
   const fn=st.fn; const lab=v=> typeof v==="number"?fmt(v,2):outLabel(v,fn);
   const d=el("div",{class:"outcome "+(last.success?"ok":"no")});
@@ -352,9 +393,9 @@ function renderMission(box,st){
   if(S.last && S.phase!=="running") box.appendChild(outcomeCard(st,S.last));
   if(tries.length>1){ const list=el("div",{class:"runs"}); list.appendChild(el("span",{class:"label"},"Attempts"));
     tries.slice(-5).forEach(r=>{ const row=el("div",{class:"r"}); row.innerHTML=`<span class="mono">x₀ ${fmt(r.x0,1)} · η ${fmt(r.lr,2)}</span><span class="chip ${r.out}">${SHORT[r.out]}</span>`; list.appendChild(row); }); box.appendChild(list); }
-  if(S.phase==="explain") explainUI(box,st);
-  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},st.id==="m4"?"Go to the transfer check":"Next mission")); box.appendChild(b); }
+  
   box.appendChild(tutorBox(st));
+  if(S.phase==="done"){ const b=el("div",{class:"btns"}); b.appendChild(el("button",{class:"btn",onclick:next},st.id==="m4"?"Go to the transfer check":"Next mission")); box.appendChild(b); }
 }
 function missionRun(){
   const st=cur(), c=cfg(); const sig=signalsFor(st,c);
@@ -502,14 +543,10 @@ function tutorBox(st){
   const h=el("div",{class:"tutor-head"}); h.appendChild(el("span",{class:"label"},"Tutor"));
   h.appendChild(el("span",{class:"badge"}, S.cond==="ai"?(S.aiOK===false?"AI unavailable · review flagged":"Adaptive AI"):"Predefined support"));
   w.appendChild(h);
-  if(S.cond==="fixed" && st.type!=="explore" && !(S.results[st.id]?.attempts||[]).length) w.appendChild(el("p",{class:"hintline"},"Make your first prediction and observe the run to unlock the predefined hints."));
-  if(S.cond==="fixed" && (st.type==="explore" || (S.results[st.id]?.attempts||[]).length)){
-    const hints=st.type==="explore"?EXPLORE_HINTS:st.hints||Object.entries(SCAFFOLD).flatMap(([name,items])=>items.map(text=>name+": "+text));
-    hints.forEach((text,index)=>{ const details=el("details"); details.appendChild(el("summary",{},"Predefined hint "+(index+1))); details.appendChild(el("p",{},esc(text)));
-      details.addEventListener("toggle",()=>{if(details.open) logEv("hint_reveal",{index,text});}); w.appendChild(details); });
-  }
   if(S.cond==="ai" && S.aiOK===false) w.appendChild(el("button",{class:"btn ghost",onclick:()=>tutorSay(st,"help","Please help with this step.")},"Retry AI assistance"));
   const t=el("div",{class:"thread"}); w.appendChild(t); fillThread(t,st);
+  // The explanation prompt and answer box are part of the chat, right below the tutor message.
+  if(S.phase==="explain" && (st.type==="check"||st.type==="mission")) explainUI(w,st);
   if(st.type==="explore"){
     if(aiLive()){
       const f=el("form",{class:"reply"}); const inp=el("input",{type:"text",id:"ask-"+st.id,placeholder:"Ask about what you see","aria-label":"Question for the tutor"});
@@ -525,17 +562,29 @@ function tutorBox(st){
     f.addEventListener("submit",ev=>{ ev.preventDefault(); const v=inp.value; if(!v.trim()) return; inp.value=""; pushMsg(st,"s",v); logEv("student_msg",{text:v}); tutorSay(st,"followup",v); });
     f.append(inp,b); w.appendChild(f);
   }
+  // Predefined hints come after the chat area.
+  const hintsBox=document.createDocumentFragment();
+  if(S.cond==="fixed" && st.type!=="explore" && !(S.results[st.id]?.attempts||[]).length) hintsBox.appendChild(el("p",{class:"hintline"},"Make your first prediction and observe the run to unlock the predefined hints."));
+  if(S.cond==="fixed" && (st.type==="explore" || (S.results[st.id]?.attempts||[]).length)){
+    const hints=st.type==="explore"?EXPLORE_HINTS:st.hints||Object.entries(SCAFFOLD).flatMap(([name,items])=>items.map(text=>name+": "+text));
+    hints.forEach((text,index)=>{ const details=el("details"); details.appendChild(el("summary",{},"Predefined hint "+(index+1))); details.appendChild(el("p",{},esc(text)));
+      details.addEventListener("toggle",()=>{if(details.open) logEv("hint_reveal",{index,text});}); hintsBox.appendChild(details); });
+  }
+  w.appendChild(hintsBox);
   return w;
 }
 
 /* ================= flow ================= */
+function applyCfg(st){
+  ctl.x0.min=(st.x0Range||[-4.5,4.5])[0]; ctl.x0.max=(st.x0Range||[-4.5,4.5])[1];
+  ctl.lr.max=Math.max(1.2,st.cfg.lr); ctl.x0.value=st.cfg.x0; ctl.lr.value=st.cfg.lr; ctl.steps.value=st.cfg.steps; syncOutputs();
+}
 function loadStep(){
   clearInterval(S.anim);
   const st=cur();
   if(st){
     const prevStage=S.log.length?S.log[S.log.length-1].stage:null;
-    ctl.x0.min=(st.x0Range||[-4.5,4.5])[0]; ctl.x0.max=(st.x0Range||[-4.5,4.5])[1];
-    ctl.lr.max=Math.max(1.2,st.cfg.lr); ctl.x0.value=st.cfg.x0; ctl.lr.value=st.cfg.lr; ctl.steps.value=st.cfg.steps; syncOutputs();
+    applyCfg(st);
     S.signals[st.id]=S.signals[st.id]||{}; S.signals[st.id].shownAt=Date.now(); S.signals[st.id].firstPredAt=null;
     S.threads[st.id]=S.threads[st.id]||[];
     S.phase="setup"; S.pred=null; S.reason=""; S.last=null; S.draft=""; S.xs=null; S.shown=1; S.ruleSeen=1;
