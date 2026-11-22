@@ -22,11 +22,21 @@ try:
   def explain(page):
    page.locator('textarea[id^=exp-]').fill('  The gradient determines direction and learning rate scales the step.  ');page.get_by_role('button',name='Submit explanation',exact=True).click()
   for condition in ['control','ai']:
-   ctx=browser.new_context(reduced_motion='reduce');page=ctx.new_page();errors=[];requests=[];page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept())
-   def mock(route):
+   ctx=browser.new_context(reduced_motion='reduce');page=ctx.new_page();errors=[];requests=[];submissions=[];downloads=[]
+   page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept());page.on('download',lambda dl:downloads.append(dl))
+   def mock_tutor(route):
     requests.append(route.request.post_data_json);route.fulfill(status=200,content_type='application/json',body=json.dumps({'text':'Compare the first two rows of the table.','provider':'groq','model':'qwen/qwen3.8-27b'}))
-   page.route('**/api/tutor',mock);consent(page,condition);assert not page.locator('#lesson').is_visible()
+   fail_once={'pending':condition=='control'}
+   def mock_submit(route):
+    submissions.append(route.request.post_data_json)
+    if fail_once['pending']:
+     fail_once['pending']=False
+     route.fulfill(status=502,content_type='application/json',body=json.dumps({'error':'store_error'}))
+     return
+    route.fulfill(status=200,content_type='application/json',body=json.dumps({'ok':True,'path':'submissions/P01-test.json','receivedAt':'2026-11-22T00:00:00Z'}))
+   page.route('**/api/tutor',mock_tutor);page.route('**/api/submit',mock_submit);consent(page,condition);assert not page.locator('#lesson').is_visible();assert page.locator('[data-export]').count()==0
    page.locator('#q5').fill(' draft\n preserved ');page.reload();assert page.locator('#q5').input_value()==' draft\n preserved '
+   page.goto(BASE+'/?condition='+('ai' if condition=='control' else 'control'));assert state(page)['condition']==condition
    assessment(page);page.locator('#runBtn').wait_for();assert not page.locator('#condAI').count()
    for rate in [.1,.5,.9]:slider(page,'lr',rate);page.locator('#runBtn').click()
    if condition=='ai':page.get_by_role('button',name="I'm stuck",exact=True).click();page.locator('.msg.t').filter(has_text='Compare the first two rows of the table.').wait_for()
@@ -51,20 +61,20 @@ try:
    page.get_by_role('button',name='Begin post-test').wait_for();assert not page.locator('#lesson').is_visible();page.get_by_role('button',name='Begin post-test').click();before=len(requests);assessment(page,True);assert len(requests)==before
    for name in ['helped','difficult','decision']:page.locator('#'+name).fill('  A specific example\nwith whitespace.  ')
    page.locator('[name=assistance][value=No]').check()
-   with page.expect_download() as automatic:page.get_by_role('button',name='Finalize feedback and finish').click()
-   auto_data=json.loads(Path(automatic.value.path()).read_text());assert auto_data['phase']=='complete';assert auto_data['automaticExportRequestedAt'];assert auto_data['feedback']['assistance']=='No'
-   page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for()
-   repeated=[];page.on('download',lambda download:repeated.append(download));page.reload();page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for();assert not repeated
-   for kind in ['participant','summary','events']:
-    with page.expect_download() as dl:page.locator('[data-export='+kind+']').click()
-    contents=Path(dl.value.path()).read_text();assert contents
-    if kind=='participant':
-     data=json.loads(contents);assert data['tests']['pre']['score']['objectiveTotal']==4;assert data['tests']['pre']['score']['total'] is None;assert data['gains']['raw'] is None
-     assert data['tests']['post']['answers']['q5'].startswith('  ');assert data['lesson']['state']['results']['t1']['explanation'].endswith('  ');assert data['learningStatus']=='completed';assert not data['incompleteSteps']
-     if condition=='ai':assert any(e.get('ev')=='tutor' and e.get('provider')=='groq' and e.get('model')=='qwen/qwen3.8-27b' for e in data['lesson']['state']['log'])
+   page.get_by_role('button',name='Finalize feedback and finish').click()
+   if condition=='control':
+    page.get_by_role('button',name='Retry submission').wait_for()
+    assert state(page) is not None and state(page)['phase']=='complete'
+    page.get_by_role('button',name='Retry submission').click()
+   page.get_by_text('Thank you — your responses have been submitted',exact=True).wait_for()
+   assert state(page) is None;assert not downloads;assert page.locator('[data-export]').count()==0
+   data=submissions[-1]
+   assert data['phase']=='complete';assert data['submissionRequestedAt'];assert data['feedback']['assistance']=='No'
+   assert data['tests']['pre']['score']['objectiveTotal']==4;assert data['tests']['pre']['score']['total'] is None;assert data['gains']['raw'] is None
+   assert data['tests']['post']['answers']['q5'].startswith('  ');assert data['lesson']['state']['results']['t1']['explanation'].endswith('  ');assert data['learningStatus']=='completed';assert not data['incompleteSteps']
+   if condition=='ai':assert any(e.get('ev')=='tutor' and e.get('provider')=='groq' and e.get('model')=='qwen/qwen3.8-27b' for e in data['lesson']['state']['log'])
    assert (len(requests)>0)==(condition=='ai');assert not errors,errors
-   page.goto(BASE+'/?condition='+('ai' if condition=='control' else 'control'));page.get_by_text('Thank you — your responses are finalized',exact=True).wait_for();assert state(page)['condition']==condition
-   print('PASS full flow, recovery, scoring, exports, isolation:',condition);ctx.close()
+   print('PASS full flow, recovery, scoring, centralized submission, local wipe, isolation:',condition);ctx.close()
   ctx=browser.new_context(viewport={'width':390,'height':844},reduced_motion='reduce');page=ctx.new_page();page.on('dialog',lambda d:d.accept());consent(page,'ai');assessment(page)
   page.get_by_role('button',name="I'm stuck",exact=True).click();page.get_by_role('button',name='Retry AI assistance').wait_for();assert 'No predefined hint has been substituted' in page.locator('#panel').inner_text()
   page.locator('#runBtn').click();page.wait_for_timeout(1100);assert state(page)['reviewRequired'];assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
@@ -72,6 +82,6 @@ try:
   other=ctx.new_page();other.goto(BASE+'/?condition=ai');other.get_by_text('This study is active in another tab.',exact=False).wait_for();other.close()
   page.add_init_script("let d=JSON.parse(localStorage.getItem('cs411-study-v1'));if(d?.phase==='learning'){d.timing.learning.startedAt=Date.now()-1801000;localStorage.setItem('cs411-study-v1',JSON.stringify(d));}")
   page.reload();page.get_by_role('button',name='Begin post-test').wait_for();assert state(page)['learningStatus']=='time_limit_incomplete';assert len(state(page)['lesson']['state']['runs']['explore'])==1
-  with page.expect_download():page.locator('[data-export=participant]').click()
-  print('PASS unavailable AI, mobile, keyboard, duplicate tab, timer expiry, expiry export');ctx.close();browser.close()
+  assert page.locator('[data-export]').count()==0
+  print('PASS unavailable AI, mobile, keyboard, duplicate tab, timer expiry');ctx.close();browser.close()
 finally:server.terminate();server.wait()

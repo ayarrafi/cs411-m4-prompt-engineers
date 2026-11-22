@@ -2,7 +2,7 @@
 'use strict';
 const C=StudyCore, KEY='cs411-study-v1', MAX=30*60*1000;
 const params=new URLSearchParams(location.search), root=document.getElementById('study'), lab=document.getElementById('lesson');
-let d,ready=false,storageFailed=false,readOnly=false,lastTick=Date.now(),lastInteraction=Date.now(),token=params.get('token')||'',tabId=crypto.randomUUID();
+let d,ready=false,storageFailed=false,duplicateTab=false,submitted=false,submissionState='idle',submissionError='',lastTick=Date.now(),lastInteraction=Date.now(),token=params.get('token')||'',tabId=crypto.randomUUID();
 // The relay access code is kept only in this tab's session storage, never exported.
 try{token=token||sessionStorage.getItem('gdlab-relay-token')||'';if(token)sessionStorage.setItem('gdlab-relay-token',token);}catch{}
 if(params.has('token')){params.delete('token');history.replaceState(null,'',location.pathname+'?'+params.toString());}
@@ -10,8 +10,8 @@ const iso=()=>new Date().toISOString();
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function event(type,data={}){ if(!d)return; d.events.push({sequence:d.events.length,t:iso(),phase:d.phase,type,...data}); }
 function flag(reason){ d.reviewRequired=true;if(!d.reviewReasons.includes(reason))d.reviewReasons.push(reason); }
-function storageWarning(){ if(storageFailed)return;storageFailed=true;flag('local_storage_unavailable');const p=document.createElement('p');p.id='storage-warning';p.role='alert';p.textContent='Recovery storage is unavailable or full. Keep this tab open and download your data regularly using Export.';document.body.prepend(p); }
-function persist(){if(!d||readOnly)return; if(d.phase==='learning'&&ready) d.lesson=window.Lesson.snapshot();try{localStorage.setItem(KEY,JSON.stringify(d));}catch{storageWarning();}}
+function storageWarning(){ if(storageFailed)return;storageFailed=true;flag('local_storage_unavailable');const p=document.createElement('p');p.id='storage-warning';p.role='alert';p.textContent='Temporary browser storage is unavailable or full. Keep this tab open until your responses are submitted at the end.';document.body.prepend(p); }
+function persist(){if(!d||duplicateTab||submitted)return; if(d.phase==='learning'&&ready) d.lesson=window.Lesson.snapshot();try{localStorage.setItem(KEY,JSON.stringify(d));}catch{storageWarning();}}
 function tick(){
   const now=Date.now(), elapsed=Math.max(0,now-lastTick); const t=d?.timing[d.phase];
   if(t&&!t.endedAt&&document.visibilityState==='visible'&&document.hasFocus()&&now-lastInteraction<60000) t.activeMs+=Math.min(elapsed,2000);
@@ -25,7 +25,7 @@ function transition(phase){
   tick(); const previous=d.phase;if(d.timing[previous]&&!d.timing[previous].endedAt)d.timing[previous].endedAt=Date.now();
   d.phase=phase;d.timing[phase]??={startedAt:Date.now(),activeMs:0};event('phase_start',{previous});persist();render();
 }
-function isLearning(){return !!d&&d.phase==='learning'&&!readOnly;}
+function isLearning(){return !!d&&d.phase==='learning'&&!duplicateTab&&!submitted;}
 function finishLearning(status){
   if(!isLearning())return;
   if(ready)d.lesson=window.Lesson.snapshot();window.Lesson.stop();d.learningStatus=status;
@@ -34,21 +34,46 @@ function finishLearning(status){
   d.timing.learning.endedAt=Date.now();d.phase='learning-ended';
   event('learning_end',{status,incompleteSteps:d.incompleteSteps});persist();render();
 }
-function download(kind){
-  tick();persist();const data={...d,exportedAt:Date.now(),scoringRubric:C.rubric,gains:C.gains(d.tests.pre?.score.total,d.tests.post?.score.total)};
-  let body,type,ext;
-  if(kind==='participant'){body=JSON.stringify(data,null,2);type='application/json';ext='json';}
-  else if(kind==='summary'){body=C.csv([C.participantRow(data)]);type='text/csv';ext='csv';}
-  else{body=C.csv(d.events.map(e=>({sessionId:d.sessionId,participantId:d.participantId,condition:d.condition,sequence:e.sequence,t:e.t,phase:e.phase,type:e.type,data:e})));type='text/csv';ext='csv';}
-  const a=document.createElement('a');const url=URL.createObjectURL(new Blob([body],{type}));a.href=url;a.download=`${d.participantId||'unassigned'}-${d.sessionId.slice(0,8)}-${kind}.${ext}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+function buildPayload(){
+  return {...d,exportedAt:Date.now(),scoringRubric:C.rubric,gains:C.gains(d.tests.pre?.score.total,d.tests.post?.score.total)};
 }
-function exportUI(){return '<div class="export" aria-label="Download study data"><button type="button" class="btn ghost" data-export="participant">Export participant JSON</button><button type="button" class="btn ghost" data-export="summary">Export summary CSV</button><button type="button" class="btn ghost" data-export="events">Export events CSV</button></div>';}
+async function submitResults(){
+  if(!d||submissionState==='submitting'||submitted)return;
+  submissionState='submitting';submissionError='';
+  d.submissionRequestedAt=d.submissionRequestedAt||iso();
+  event('submission_requested');persist();render();
+  let status=null,code='network_error';
+  try{
+    const res=await fetch('/api/submit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(buildPayload()),
+      signal:AbortSignal.timeout(25000)
+    });
+    status=res.status;
+    let body=null;try{body=await res.json();}catch{}
+    if(res.ok&&body?.ok){
+      submitted=true;submissionState='submitted';
+      try{localStorage.removeItem(KEY);}catch{}
+      try{sessionStorage.removeItem('gdlab-relay-token');}catch{}
+      token='';
+      render();
+      return;
+    }
+    code=body?.error||`http_${res.status}`;
+  }catch(err){
+    code=['TimeoutError','AbortError'].includes(err?.name)?'timeout':'network_error';
+  }
+  submissionState='failed';
+  submissionError=code==='submission_not_configured'?'collection server is not configured':code==='timeout'?'request timed out':'server unreachable';
+  event('submission_failed',{status,code});persist();render();
+}
 const phases=['consent','pre','learning','learning-ended','post','feedback','complete'];
 function render(){
   lab.hidden=!isLearning();lab.inert=!isLearning();root.innerHTML='';
   if(!d){root.innerHTML='<section class="card"><h1>Gradient Descent Lab study</h1><p>Please open the AI or control entry link supplied by the research team. A valid link includes <code>?condition=ai</code> or <code>?condition=control</code>.</p></section>';return;}
-  const header=document.createElement('section');header.className='card';header.innerHTML=`<div class="status"><strong>CS-411 · Gradient Descent Lab study</strong><span id="phase-clock" role="timer"></span></div><p>Participant: ${escape(d.participantId||'not yet entered')} · Assigned support: ${escape(d.condition==='ai'?'AI tutor':'Predefined support')}</p><progress aria-label="Study progress" max="6" value="${phases.indexOf(d.phase)}"></progress>${exportUI()}`;root.append(header);
-  if(readOnly){header.insertAdjacentHTML('beforeend','<p role="alert">This study is active in another tab. Continue there. This tab is read-only to prevent conflicting responses.</p>');return;}
+  const header=document.createElement('section');header.className='card';header.innerHTML=`<div class="status"><strong>CS-411 · Gradient Descent Lab study</strong><span id="phase-clock" role="timer"></span></div><p>Participant: ${escape(d.participantId||'not yet entered')} · Assigned support: ${escape(d.condition==='ai'?'AI tutor':'Predefined support')}</p><progress aria-label="Study progress" max="6" value="${phases.indexOf(d.phase)}"></progress>`;root.append(header);
+  if(duplicateTab){header.insertAdjacentHTML('beforeend','<p role="alert">This study is active in another tab. Continue there. This tab is read-only to prevent conflicting responses.</p>');return;}
   if(isLearning()){
     header.insertAdjacentHTML('beforeend','<p>Learning activity · maximum 30 minutes, including time away from this tab. The internal transfer check is part of the lesson, not the official post-test.</p>');
     if(!ready){ready=true;window.Lesson.start(d.condition,d.lesson);}
@@ -62,12 +87,20 @@ function render(){
     box.querySelector('button').onclick=()=>transition('post');
   }
   if(d.phase==='feedback') feedback(box);
-  if(d.phase==='complete') box.innerHTML='<h2>Thank you — your responses are finalized</h2><p>No scores or answer key are displayed. Your complete participant JSON is automatically offered for download when you finish. Check your Downloads folder or browser download prompt. If no file appeared, use “Export participant JSON” above. Deliver that file using the secure channel specified by your research team. The CSV files are optional analysis copies. This website does not submit data to a collection server.</p><p>Keep the downloaded file until the research team confirms receipt. Your recovery copy remains in this browser. To remove it after delivery, use the button below.</p><button class="btn ghost" id="erase">Remove local recovery copy</button>';
-  const erase=document.getElementById('erase');if(erase)erase.onclick=()=>{if(confirm('Have you downloaded and delivered your participant JSON? Removing the recovery copy cannot be undone.')){localStorage.removeItem(KEY);readOnly=true;box.innerHTML='<h2>Local recovery copy removed</h2><p>Your downloaded files are unaffected. You may close this tab.</p>';}};
+  if(d.phase==='complete'){
+    if(submissionState==='submitted'){
+      box.innerHTML='<h2>Thank you — your responses have been submitted</h2><p>Your anonymous responses have been recorded by the research team’s server, and temporary session data has been cleared from this browser. No scores or answer key are displayed. You may now close this tab.</p>';
+    }else if(submissionState==='failed'){
+      box.innerHTML=`<h2>Submission could not be completed</h2><p class="error" role="alert">We could not send your responses to the study server${submissionError?` (${escape(submissionError)})`:''}. Please check your internet connection and click Retry submission below. Keep this tab open until submission succeeds.</p><button class="btn" id="retry-submit">Retry submission</button>`;
+      box.querySelector('#retry-submit').onclick=()=>submitResults();
+    }else{
+      box.innerHTML='<h2>Submitting your responses…</h2><p>Please keep this tab open while your anonymous responses are sent to the study server.</p>';
+    }
+  }
   const heading=box.querySelector('h2');if(heading){heading.tabIndex=-1;heading.focus();}
 }
 function consent(box){
-  box.innerHTML=`<h2>Participant information and consent</h2><p>This CS-411 educational study compares two forms of support for learning gradient descent. The research team assigns participants to a group outside this application. Participation is voluntary; you may stop at any time without submitting your export.</p><p>Allow approximately 45–49 minutes: pre-test 5–7 minutes, learning up to 30 minutes, post-test 5–7 minutes, feedback about 5 minutes. Both groups receive the same activity and assessments.</p><p>We save your anonymous ID, answers, written explanations, settings, timings, and tutor conversations for research analysis. Do not enter your name, email, or other identifying details. A complete data file is offered for download automatically when you finish; you can also export it manually. Data is not sent to the research team until you deliver the file. In the AI group, lesson context and tutor messages are sent through the study relay to its configured AI provider; assessment answers are never sent to the tutor.</p><p>Review the research team's accompanying information sheet for investigator contact, AI provider, retention period, and withdrawal arrangements. Contact the team before consenting if those details were not supplied.</p><form id="consent-form"><label for="participant-id">Anonymous participant ID supplied by the team</label><input id="participant-id" name="participantId" type="text" required pattern="[A-Za-z0-9_-]{2,40}" maxlength="40" autocomplete="off" value="${escape(d.participantId)}"><p class="hintline">Use only letters, numbers, hyphens, or underscores.</p><label class="opt"><input name="agree" type="checkbox" required> I have read the study information, understand what is saved and analyzed, and voluntarily consent to participate.</label><button class="btn">Consent and begin pre-test</button></form>`;
+  box.innerHTML=`<h2>Participant information and consent</h2><p>This CS-411 educational study compares two forms of support for learning gradient descent. The research team assigns participants to a group outside this application. Participation is voluntary; you may stop at any time before submitting your responses.</p><p>Allow approximately 45–49 minutes: pre-test 5–7 minutes, learning up to 30 minutes, post-test 5–7 minutes, feedback about 5 minutes. Both groups receive the same activity and assessments.</p><p>We save your anonymous ID, answers, written explanations, settings, timings, and tutor conversations for research analysis. Do not enter your name, email, or other identifying details. Temporary progress is kept in your browser only during the session so you can recover from a refresh. When you finish, your anonymous responses are submitted automatically to the research team’s collection server and cleared from your browser; you do not need to download or send any files. In the AI group, lesson context and tutor messages are sent through the study relay to its configured AI provider; assessment answers are never sent to the tutor.</p><p>Review the research team's accompanying information sheet for investigator contact, AI provider, retention period, and withdrawal arrangements. Contact the team before consenting if those details were not supplied.</p><form id="consent-form"><label for="participant-id">Anonymous participant ID supplied by the team</label><input id="participant-id" name="participantId" type="text" required pattern="[A-Za-z0-9_-]{2,40}" maxlength="40" autocomplete="off" value="${escape(d.participantId)}"><p class="hintline">Use only letters, numbers, hyphens, or underscores.</p><label class="opt"><input name="agree" type="checkbox" required> I have read the study information, understand what is saved and analyzed, and voluntarily consent to participate.</label><button class="btn">Consent and begin pre-test</button></form>`;
   box.querySelector('form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);d.participantId=f.get('participantId');d.consent={accepted:true,t:iso(),informationVersion:C.VERSION};event('consent');transition('pre');};
 }
 const objective='What is the main objective of gradient descent?';
@@ -100,22 +133,20 @@ function feedback(box){
   ${textArea('decision','Describe one decision you made while experimenting with gradient descent. What motivated your choice, and what did you learn from the result?',a,true)}
   ${textArea('other','Is there anything else you would like to mention about the activity or your learning experience? (optional)',a)}
   <fieldset><legend>External assistance</legend><p>Did you use any external AI tool or other unauthorized assistance during the activity or assessments?</p>${radios('assistance',[['No','No'],['Yes','Yes'],['Prefer not to say','Prefer not to say']],a)}${textArea('assistanceExplanation','Please explain (optional).',a)}</fieldset><button class="btn">Finalize feedback and finish</button></form>`;
-  const form=box.querySelector('form');form.oninput=()=>{d.feedback=Object.fromEntries(new FormData(form));persist();};form.onsubmit=e=>{e.preventDefault();if(d.phase!=='feedback')return;d.feedback=Object.fromEntries(new FormData(form));event('feedback_finalized');transition('complete');
-    if(!d.automaticExportRequestedAt){d.automaticExportRequestedAt=iso();event('automatic_export_requested',{kind:'participant'});persist();try{download('participant');}catch{event('automatic_export_failed');persist();}}};
+  const form=box.querySelector('form');form.oninput=()=>{d.feedback=Object.fromEntries(new FormData(form));persist();};form.onsubmit=e=>{e.preventDefault();if(d.phase!=='feedback')return;d.feedback=Object.fromEntries(new FormData(form));event('feedback_finalized');transition('complete');submitResults();};
 }
 function boot(){
   let saved;try{saved=localStorage.getItem(KEY);}catch{}
-  if(saved){try{d=JSON.parse(saved);if(d.schemaVersion!==C.VERSION||!phases.includes(d.phase))throw new Error();}catch{root.innerHTML='<section class="card"><h1>Recovery data could not be read</h1><p>Contact the research team before restarting. Your stored data has not been overwritten.</p><button id="recover">Download original recovery data</button></section>';document.getElementById('recover').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([saved],{type:'text/plain'}));a.download='recovery-data.txt';a.click();};return;}}
+  if(saved){try{d=JSON.parse(saved);if(d.schemaVersion!==C.VERSION||!phases.includes(d.phase))throw new Error();}catch{root.innerHTML='<section class="card"><h1>Session could not be resumed</h1><p>Please contact the research team for assistance before continuing.</p></section>';return;}}
   if(!d){const condition=params.get('condition');if(!['ai','control'].includes(condition)){render();return;}
     d={schemaVersion:C.VERSION,sessionId:crypto.randomUUID(),participantId:/^[A-Za-z0-9_-]{2,40}$/.test(params.get('pid')||'')?params.get('pid'):'',condition,phase:'consent',consent:{accepted:false},answers:{pre:{},post:{}},tests:{},feedback:{},events:[],timing:{},reviewRequired:false,reviewReasons:[],createdAt:iso()};
   }else{
     event('browser_refresh');if(params.get('condition')&&params.get('condition')!==d.condition){flag('assignment_link_mismatch');event('assignment_link_ignored');}
   }
-  function launch(){tick();persist();render();setInterval(()=>{if(!readOnly){tick();persist();}},1000);}
+  function launch(){tick();persist();render();if(d.phase==='complete')submitResults();setInterval(()=>{if(!duplicateTab&&!submitted){tick();persist();}},1000);}
   // An exclusive Web Lock prevents concurrent tabs from writing the same session.
-  if(navigator.locks){navigator.locks.request(KEY,{ifAvailable:true},async lock=>{if(!lock){readOnly=true;render();return;}launch();await new Promise(()=>{});});}else{flag('multi_tab_lock_unavailable');launch();}
+  if(navigator.locks){navigator.locks.request(KEY,{ifAvailable:true},async lock=>{if(!lock){duplicateTab=true;render();return;}launch();await new Promise(()=>{});});}else{flag('multi_tab_lock_unavailable');launch();}
 }
-root.addEventListener('click',e=>{const kind=e.target.dataset.export;if(kind)download(kind);});
 for(const type of ['pointerdown','keydown','input'])document.addEventListener(type,()=>{lastInteraction=Date.now();queueMicrotask(persist);},{passive:true});
 document.addEventListener('visibilitychange',()=>{tick();event('visibility',{state:document.visibilityState});persist();});
 window.addEventListener('pagehide',()=>{tick();persist();});

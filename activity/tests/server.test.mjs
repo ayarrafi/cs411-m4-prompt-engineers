@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {createServer} from '../server.mjs';import {generateTutor} from '../tutor-provider.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {createServer} from '../server.mjs';import {generateTutor} from '../tutor-provider.mjs';import {saveSubmission,submissionConfig,SubmissionStoreError} from '../submission-store.mjs';
 test('relay guards, provider contract, static allowlist, errors',async()=>{
   let calls=0;const server=createServer({env:{APP_ORIGIN:'http://study.test',ANTHROPIC_API_KEY:'test-only',TUTOR_MODEL:'test-model',STUDY_AI_TOKENS:'test-code'},provider:async()=>{calls++;return 'Compare two learning rates.';}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}`;
@@ -55,4 +55,67 @@ test('Groq-only configuration works; credentials are not served; rate limits rem
     assert.equal(r.status,200);const data=await r.json();assert.equal(data.text,'Compare the first step.');assert.equal(data.provider,'groq');assert.equal(data.model,'qwen/qwen3.8-27b');assert.equal(data.available,true);assert.equal(data.reasoningEffort,'none');
   }finally{await new Promise(r=>server.close(r));}
   assert.throws(()=>createServer({env:{TUTOR_PROVIDER:'typo'}}),/TUTOR_PROVIDER/);
+});
+test('submission store config validation, GitHub Contents PUT, idempotent retry, error sanitization',async()=>{
+  assert.throws(()=>submissionConfig({GITHUB_DATA_REPO:'not-a-repo'}),/GITHUB_DATA_REPO/);
+  assert.throws(()=>submissionConfig({GITHUB_DATA_REPO:'org/data',GITHUB_DATA_PATH:'../escape'}),/GITHUB_DATA_PATH/);
+  const cfg=submissionConfig({GITHUB_DATA_REPO:'org/study-data',GITHUB_DATA_TOKEN:'ghp_secret',GITHUB_DATA_BRANCH:'main',GITHUB_DATA_PATH:'/results/'});
+  assert.equal(cfg.configured,true);assert.equal(cfg.pathPrefix,'results');
+
+  const calls=[];
+  const sample={schemaVersion:'cs411-m4-v1',sessionId:'12345678-abcd-ef01-2345-67890abcdef0',participantId:'P01',condition:'control',phase:'complete'};
+  const saved=await saveSubmission({submission:sample,...cfg,fetchImpl:async(url,options)=>{
+    calls.push({url,method:options.method,body:options.body,auth:options.headers.Authorization});
+    return {ok:true,status:201,json:async()=>({commit:{sha:'abc123'}})};
+  }});
+  assert.equal(saved.path,'results/P01-12345678.json');assert.equal(saved.commitSha,'abc123');
+  assert.equal(calls.length,1);assert.equal(calls[0].url,'https://api.github.com/repos/org/study-data/contents/results/P01-12345678.json');
+  assert.equal(calls[0].auth,'Bearer ghp_secret');assert.ok(!calls[0].body.includes('ghp_secret'));
+  const decoded=JSON.parse(Buffer.from(JSON.parse(calls[0].body).content,'base64').toString('utf8'));
+  assert.equal(decoded.participantId,'P01');
+
+  // Idempotent retry: 422 on initial PUT -> GET existing sha -> PUT with sha succeeds.
+  let step=0;
+  const retried=await saveSubmission({submission:sample,...cfg,fetchImpl:async(url,options)=>{
+    step++;
+    if(step===1){assert.equal(options.method,'PUT');return {ok:false,status:422};}
+    if(step===2){assert.equal(options.method,'GET');assert.ok(url.endsWith('?ref=main'));return {ok:true,status:200,json:async()=>({sha:'existing-sha'})};}
+    assert.equal(options.method,'PUT');assert.equal(JSON.parse(options.body).sha,'existing-sha');
+    return {ok:true,status:200,json:async()=>({commit:{sha:'def456'}})};
+  }});
+  assert.equal(retried.commitSha,'def456');assert.equal(step,3);
+
+  for(const [status,code] of [[401,'store_auth_error'],[403,'store_auth_error'],[404,'store_repo_error'],[429,'store_rate_limited'],[500,'store_error']]){
+    await assert.rejects(saveSubmission({submission:sample,...cfg,fetchImpl:async()=>({ok:false,status})}),e=>e instanceof SubmissionStoreError&&e.code===code);
+  }
+});
+test('/api/submit guards, works without AI tokens, strips token, blocks server files',async()=>{
+  const stored=[];
+  const server=createServer({
+    env:{APP_ORIGIN:'http://study.test',GITHUB_DATA_REPO:'org/study-data',GITHUB_DATA_TOKEN:'ghp_test'},
+    store:async({submission,repo})=>{stored.push({submission,repo});return {path:'submissions/P01-12345678.json',commitSha:'sha1'};}
+  });
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const url=`http://127.0.0.1:${server.address().port}`;
+  const valid={schemaVersion:'cs411-m4-v1',sessionId:'12345678-abcd-ef01-2345-67890abcdef0',participantId:'P01',condition:'control',phase:'complete',token:'should-be-stripped'};
+  const post=(body,origin='http://study.test')=>fetch(url+'/api/submit',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)});
+  try{
+    for(const file of ['submission-store.mjs','export-csv.mjs'])assert.equal((await fetch(url+'/'+file)).status,404);
+    assert.equal((await fetch(url+'/api/submit')).status,405);
+    assert.equal((await post(valid,'https://evil.test')).status,403);
+    assert.equal((await post({...valid,phase:'learning'})).status,400);
+    assert.equal((await post({...valid,participantId:'../bad'})).status,400);
+    const res=await post(valid);
+    assert.equal(res.status,200);
+    const json=await res.json();assert.equal(json.ok,true);assert.equal(json.path,'submissions/P01-12345678.json');assert.ok(json.receivedAt);
+    assert.equal(stored.length,1);assert.equal(stored[0].repo,'org/study-data');assert.equal(stored[0].submission.token,undefined);assert.equal(stored[0].submission.receivedAt,json.receivedAt);
+  }finally{await new Promise(r=>server.close(r));}
+
+  // Unconfigured submission store returns 503 explicitly.
+  const unconf=createServer({env:{APP_ORIGIN:'http://study.test'}});
+  await new Promise(r=>unconf.listen(0,'127.0.0.1',r));
+  try{
+    const r=await fetch(`http://127.0.0.1:${unconf.address().port}/api/submit`,{method:'POST',headers:{'Content-Type':'application/json',Origin:'http://study.test'},body:JSON.stringify(valid)});
+    assert.equal(r.status,503);assert.equal((await r.json()).error,'submission_not_configured');
+  }finally{await new Promise(r=>unconf.close(r));}
 });

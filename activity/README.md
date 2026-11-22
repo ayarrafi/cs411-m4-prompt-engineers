@@ -77,13 +77,29 @@ To check the actual integration, configure real secrets, start an AI test sessio
 - Transfer Q2 supplies the first two updates for pattern reasoning; Q3 includes selected positions and distances with an explicit 0.05 target. These supports are identical in both conditions; the official pre/post-tests are unchanged.
 - Corrected constant-amplitude oscillation classification, clamped fixed sliders (including transfer settings), an overly broad mission learning-rate range, and claims that every finite gradient step decreases the objective or cannot cross a valley.
 
-## Scoring and research exports
+## Scoring and centralized research collection
 
-The final feedback submission automatically requests one complete participant JSON download. Browsers may prompt or block downloads; the completion screen asks participants to check and provides the manual export fallback. Refreshing a completed session does not trigger another automatic download. Downloads are also available throughout, including incomplete/error sessions. There is **no research collection backend**. Participants must download the participant JSON and deliver it through the team's approved secure channel. Filenames include anonymous ID and session identifier. Keep exports outside this repository.
+When a participant submits the final feedback form, the browser automatically sends the complete participant JSON to `POST /api/submit` on the same origin. `server.mjs` validates the payload, attaches a server-side `receivedAt` timestamp, and commits `<participantId>-<sessionIdPrefix>.json` to a **private GitHub repository** via `submission-store.mjs`. Once the server confirms receipt, temporary session data in `localStorage` and `sessionStorage` is wiped automatically. There are no student-facing download/export buttons, and participants do not need to send any files. If a network error or Render cold-start timeout occurs during submission, temporary browser storage is retained until the participant clicks **Retry submission** (or refreshes) and the server confirms receipt.
 
-1. **Participant JSON:** version, session/participant IDs, assigned condition, consent, prior experience, exact written answers/drafts/notes, submitted tests and scores, lesson snapshot and original event log, qualitative responses, phase timestamps/active estimates, interruption flags, unified events, rubric, and gains.
-2. **Summary CSV:** one participant row, separately scored Q1/Q2/Q3A/Q3B/Q4, objective subtotal, pending manual fields, phase durations, completion status, prior experience, external assistance, review reasons, and valid gains. CSV uses quoted fields and guards spreadsheet formula prefixes. JSON is the canonical lossless source.
-3. **Events CSV:** one event per row with session/participant/condition identifiers, sequence, timestamp, phase, type, and JSON detail. Covers settings, predictions/accuracy, runs, attempts, explanations, voluntary hint reveals, tutor requests/responses/interruption status, refreshes, visibility, and errors. The original lesson log is also retained in the snapshot.
+Configure centralized collection with these server environment variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `GITHUB_DATA_REPO` | Private GitHub repository in `owner/repo` format for storing submissions |
+| `GITHUB_DATA_TOKEN` | Fine-grained GitHub Personal Access Token with **Contents: Read and write** permission scoped only to `GITHUB_DATA_REPO` (server secret only) |
+| `GITHUB_DATA_BRANCH` | Target branch in the private data repository (defaults to `main`) |
+| `GITHUB_DATA_PATH` | Folder prefix inside the private data repository (defaults to `submissions`) |
+| `APP_ORIGIN` | Exact browser origin allowed to call `/api/submit` and `/api/tutor` |
+
+Researchers access collected JSON files directly in the private GitHub repository (e.g. `git pull`). To generate combined `summary.csv` and `events.csv` tables across all collected sessions offline:
+
+```sh
+node export-csv.mjs /path/to/private-data-repo/submissions /path/to/output-dir
+```
+
+1. **Participant JSON:** version, session/participant IDs, assigned condition, consent, prior experience, exact written answers/drafts/notes, submitted tests and scores, lesson snapshot and original event log, qualitative responses, phase timestamps/active estimates, interruption flags, unified events, rubric, gains, and server `receivedAt`.
+2. **Summary CSV (`export-csv.mjs`):** one row per unique `sessionId`, separately scored Q1/Q2/Q3A/Q3B/Q4, objective subtotal, pending manual fields, phase durations, completion status, prior experience, external assistance, review reasons, and valid gains. CSV uses quoted fields and guards spreadsheet formula prefixes. JSON is the canonical lossless source.
+3. **Events CSV (`export-csv.mjs`):** one event per row with session/participant/condition identifiers, sequence, timestamp, phase, type, and JSON detail. Covers settings, predictions/accuracy, runs, attempts, explanations, voluntary hint reveals, tutor requests/responses/interruption status, refreshes, visibility, and errors. The original lesson log is also retained in the snapshot.
 
 Each official test has **5 automatically scored points + 4 manually graded points = 9**. Q3B is checked against the correct numerical result independently of Q3A, tolerance 0.000001. Q3C remains pending manual grading: one point only for the correct direction **and** valid justification. Q5 remains pending, with three separate 0/1 rubric items (gradient role, iteration, minimization). No AI/manual-score inference occurs. The internal transfer score (0–3) is separate and never added to the official score. Optional notes and feedback are unscored.
 
@@ -142,10 +158,11 @@ For approximately 10 students, pilot with staggered sessions and examine exporte
 
 Use a Render **Web Service**, not a Static Site, so `/api/tutor` and the frontend share one HTTPS origin. No deployment has been performed.
 
-1. Connect the repository to Render. Select Node runtime, root directory `activity`, build command `node --version`, start command `node server.mjs`, and the Free instance if offered to your account. This project needs no npm install or build.
-2. In Render's environment settings set `NODE_VERSION=22`, `HOST=0.0.0.0`, `TUTOR_PROVIDER=groq`, `TUTOR_MODEL=qwen/qwen3.8-27b`, `TUTOR_REASONING_EFFORT=none`. Let Render supply `PORT`.
-3. Set `GROQ_API_KEY` and `STUDY_AI_TOKENS` as server secrets. Set `APP_ORIGIN` to your assigned `https://YOUR-SERVICE.onrender.com` origin, without a trailing slash. Save/redeploy after the hostname is known. Never upload `.env` or research exports.
-4. Use the same origin for control and AI links, as documented above. Test AI requests and exports from the public URL. Keep the provider/model fixed throughout the experiment.
-5. Review host access-log handling for query strings containing study codes. No server filesystem or database is used for participant collection; participant exports still need delivery to the research team.
+1. Create a **private** GitHub repository for collected participant outputs (e.g. `YOUR-ORG/cs411-study-data`, initialized with a README on `main`), and create a fine-grained GitHub Personal Access Token scoped **only** to that repository with **Contents: Read and write** permission.
+2. Connect the application repository to Render. Select Node runtime, root directory `activity`, build command `node --version`, start command `node server.mjs`, and the Free instance if offered to your account. This project needs no npm install or build.
+3. In Render's environment settings set `NODE_VERSION=22`, `HOST=0.0.0.0`, `TUTOR_PROVIDER=groq`, `TUTOR_MODEL=qwen/qwen3.8-27b`, `TUTOR_REASONING_EFFORT=none`, `GITHUB_DATA_REPO=YOUR-ORG/cs411-study-data`, `GITHUB_DATA_BRANCH=main`, `GITHUB_DATA_PATH=submissions`. Let Render supply `PORT`.
+4. Set `GROQ_API_KEY`, `STUDY_AI_TOKENS`, and `GITHUB_DATA_TOKEN` as server secrets. Set `APP_ORIGIN` to your assigned `https://YOUR-SERVICE.onrender.com` origin, without a trailing slash. Save/redeploy after the hostname is known. Never upload `.env` or research exports to the public code repository.
+5. Use the same origin for control and AI links, as documented above. Test AI requests and centralized submission from the public URL, and verify the JSON file appears in your private data repository. Keep the provider/model fixed throughout the experiment.
+6. Review host access-log handling for query strings containing study codes. No Render filesystem or database is used for participant collection; submissions are committed directly to your private GitHub data repository so they survive Render Free-tier restarts and spin-downs.
 
 Render's [free services](https://render.com/docs/free) spin down after 15 minutes without traffic and can take time to wake up. A cold-start tutor request may exceed our timeout, including after a long inactive lesson period. Open and test the site before a scheduled session; if a cold start occurs, the participant sees an explicit failure/retry and the session is flagged. Free hosting is a pilot option, not a guarantee of uninterrupted study assistance. In-memory relay rate counters reset on restart; no personal data is retained on the host by this application. See [Render Web Services](https://render.com/docs/web-services) for current setup and limits.
