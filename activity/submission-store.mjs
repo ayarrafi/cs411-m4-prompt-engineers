@@ -1,22 +1,53 @@
-// Centralized submission persistence to a private GitHub repository.
-// Uses native fetch (Node 22+) with zero npm dependencies; credentials stay server-side.
+// Centralized submission persistence to Firebase Storage (Google Cloud Storage).
+// Uses Node 22+ built-in crypto + native fetch with zero npm dependencies; credentials stay server-side.
+import {createSign} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+
 export class SubmissionStoreError extends Error {
   constructor(code){super(code);this.code=code;}
 }
 
-const REPO_RE=/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
-const SAFE_SEGMENT_RE=/^[A-Za-z0-9._-]+$/;
+const BUCKET_RE=/^[A-Za-z0-9._-]+$/;
+const tokenCache=new Map();
+
+function parseServiceAccount(raw){
+  let text=raw.trim();
+  if(!text.startsWith('{')){
+    // Allow base64-encoded service account JSON in environment variables.
+    try{text=Buffer.from(text,'base64').toString('utf8').trim();}catch{}
+  }
+  let parsed;
+  try{parsed=JSON.parse(text);}catch{throw new Error('Firebase service account JSON is invalid');}
+  if(typeof parsed?.client_email!=='string'||!parsed.client_email||typeof parsed?.private_key!=='string'||!parsed.private_key.includes('BEGIN')){
+    throw new Error('Firebase service account JSON must contain client_email and private_key');
+  }
+  return {
+    clientEmail:parsed.client_email,
+    privateKey:parsed.private_key.replace(/\\n/g,'\n'),
+    tokenUri:typeof parsed.token_uri==='string'&&parsed.token_uri?parsed.token_uri:'https://oauth2.googleapis.com/token'
+  };
+}
 
 export function submissionConfig(env){
-  const repo=(env.GITHUB_DATA_REPO||'').trim();
-  const token=(env.GITHUB_DATA_TOKEN||'').trim();
-  const branch=(env.GITHUB_DATA_BRANCH||'main').trim()||'main';
-  const rawPath=(env.GITHUB_DATA_PATH??'submissions').trim().replace(/^\/+|\/+$/g,'');
-  if(repo&&!REPO_RE.test(repo))throw new Error('GITHUB_DATA_REPO must be in owner/repo format');
-  if(rawPath&&!rawPath.split('/').every(seg=>SAFE_SEGMENT_RE.test(seg)&&seg!=='.'&&seg!=='..')){
-    throw new Error('GITHUB_DATA_PATH contains invalid path segments');
+  const bucket=(env.FIREBASE_STORAGE_BUCKET||'').trim().replace(/^gs:\/\//,'').replace(/\/+$/,'');
+  if(bucket&&!BUCKET_RE.test(bucket))throw new Error('FIREBASE_STORAGE_BUCKET is invalid');
+  const rawJson=(env.FIREBASE_SERVICE_ACCOUNT_JSON||'').trim();
+  const jsonPath=(env.FIREBASE_SERVICE_ACCOUNT_PATH||'').trim();
+  let creds=null;
+  if(rawJson){
+    creds=parseServiceAccount(rawJson);
+  }else if(jsonPath){
+    let fileText;
+    try{fileText=readFileSync(jsonPath,'utf8');}catch{throw new Error('FIREBASE_SERVICE_ACCOUNT_PATH could not be read');}
+    creds=parseServiceAccount(fileText);
   }
-  return {repo,token,branch,pathPrefix:rawPath,configured:!!(repo&&token)};
+  return {
+    bucket,
+    clientEmail:creds?.clientEmail||'',
+    privateKey:creds?.privateKey||'',
+    tokenUri:creds?.tokenUri||'https://oauth2.googleapis.com/token',
+    configured:!!(bucket&&creds?.clientEmail&&creds?.privateKey)
+  };
 }
 
 function safeId(value,fallback){
@@ -27,62 +58,79 @@ function safeId(value,fallback){
 function mapStatus(status){
   if(status===429)return 'store_rate_limited';
   if(status===401||status===403)return 'store_auth_error';
-  if(status===404)return 'store_repo_error';
+  if(status===404)return 'store_bucket_error';
   return 'store_error';
 }
 
-export async function saveSubmission({submission,repo,token,branch='main',pathPrefix='submissions',fetchImpl=fetch}){
-  if(!repo||!token)throw new SubmissionStoreError('store_not_configured');
-  const pid=safeId(submission?.participantId,'unassigned');
-  const sid=safeId(submission?.sessionId,'session').slice(0,8);
-  const fileName=`${pid}-${sid}.json`;
-  const filePath=pathPrefix?`${pathPrefix}/${fileName}`:fileName;
-  const encodedPath=filePath.split('/').map(encodeURIComponent).join('/');
-  const baseUrl=`https://api.github.com/repos/${repo}/contents/${encodedPath}`;
-  const headers={
-    Authorization:`Bearer ${token}`,
-    Accept:'application/vnd.github+json',
-    'X-GitHub-Api-Version':'2022-11-28',
-    'User-Agent':'cs411-gradient-descent-lab'
-  };
-  const content=Buffer.from(JSON.stringify(submission,null,2)+'\n','utf8').toString('base64');
-
-  const putFile=async(sha)=>{
-    const body={message:`Submit ${pid} (${sid})`,content,branch,...(sha?{sha}:{})};
-    try{
-      return await fetchImpl(baseUrl,{
-        method:'PUT',
-        signal:AbortSignal.timeout(20000),
-        headers:{...headers,'Content-Type':'application/json'},
-        body:JSON.stringify(body)
-      });
-    }catch(error){
-      throw new SubmissionStoreError(['TimeoutError','AbortError'].includes(error?.name)?'store_timeout':'store_network_error');
-    }
-  };
-
-  let response=await putFile(null);
-  // If the file already exists (e.g., idempotent retry), fetch its current SHA and update it.
-  if(response.status===422||response.status===409){
-    let existing;
-    try{
-      existing=await fetchImpl(`${baseUrl}?ref=${encodeURIComponent(branch)}`,{
-        method:'GET',
-        signal:AbortSignal.timeout(20000),
-        headers
-      });
-    }catch(error){
-      throw new SubmissionStoreError(['TimeoutError','AbortError'].includes(error?.name)?'store_timeout':'store_network_error');
-    }
-    if(existing.ok){
-      let meta;try{meta=await existing.json();}catch{throw new SubmissionStoreError('store_error');}
-      if(typeof meta?.sha==='string'&&meta.sha){
-        response=await putFile(meta.sha);
-      }
-    }
+async function getAccessToken({clientEmail,privateKey,tokenUri,fetchImpl}){
+  const cacheKey=`${clientEmail}|${tokenUri}`;
+  if(fetchImpl===fetch){
+    const cached=tokenCache.get(cacheKey);
+    if(cached&&cached.expiresAt>Date.now()+60000)return cached.token;
   }
+  const now=Math.floor(Date.now()/1000);
+  const header=Buffer.from(JSON.stringify({alg:'RS256',typ:'JWT'})).toString('base64url');
+  const claims=Buffer.from(JSON.stringify({
+    iss:clientEmail,
+    scope:'https://www.googleapis.com/auth/devstorage.read_write',
+    aud:tokenUri,
+    iat:now,
+    exp:now+3600
+  })).toString('base64url');
+  const signingInput=`${header}.${claims}`;
+  let signature;
+  try{
+    signature=createSign('RSA-SHA256').update(signingInput).end().sign(privateKey,'base64url');
+  }catch{
+    throw new SubmissionStoreError('store_auth_error');
+  }
+  const body=`grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${encodeURIComponent(`${signingInput}.${signature}`)}`;
+  let response;
+  try{
+    response=await fetchImpl(tokenUri,{
+      method:'POST',
+      signal:AbortSignal.timeout(20000),
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body
+    });
+  }catch(error){
+    throw new SubmissionStoreError(['TimeoutError','AbortError'].includes(error?.name)?'store_timeout':'store_network_error');
+  }
+  if(!response.ok){
+    const code=response.status===429?'store_rate_limited':[400,401,403].includes(response.status)?'store_auth_error':'store_error';
+    throw new SubmissionStoreError(code);
+  }
+  let data;try{data=await response.json();}catch{throw new SubmissionStoreError('store_error');}
+  if(typeof data?.access_token!=='string'||!data.access_token)throw new SubmissionStoreError('store_auth_error');
+  if(fetchImpl===fetch){
+    const ttlMs=Math.max(60,Number(data.expires_in)||3600)*1000;
+    tokenCache.set(cacheKey,{token:data.access_token,expiresAt:Date.now()+ttlMs});
+  }
+  return data.access_token;
+}
 
+export async function saveSubmission({submission,bucket,clientEmail,privateKey,tokenUri='https://oauth2.googleapis.com/token',fetchImpl=fetch}){
+  if(!bucket||!clientEmail||!privateKey)throw new SubmissionStoreError('store_not_configured');
+  const condition=submission?.condition==='ai'?'ai':submission?.condition==='control'?'control':'unknown';
+  const pid=safeId(submission?.participantId,'unassigned');
+  const objectPath=`${condition}/${pid}.json`;
+  const accessToken=await getAccessToken({clientEmail,privateKey,tokenUri,fetchImpl});
+  const uploadUrl=`https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
+  let response;
+  try{
+    response=await fetchImpl(uploadUrl,{
+      method:'POST',
+      signal:AbortSignal.timeout(20000),
+      headers:{
+        Authorization:`Bearer ${accessToken}`,
+        'Content-Type':'application/json; charset=utf-8'
+      },
+      body:JSON.stringify(submission,null,2)+'\n'
+    });
+  }catch(error){
+    throw new SubmissionStoreError(['TimeoutError','AbortError'].includes(error?.name)?'store_timeout':'store_network_error');
+  }
   if(!response.ok)throw new SubmissionStoreError(mapStatus(response.status));
   let result;try{result=await response.json();}catch{result=null;}
-  return {path:filePath,commitSha:result?.commit?.sha??null};
+  return {path:objectPath,generation:result?.generation??null};
 }

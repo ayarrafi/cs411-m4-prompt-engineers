@@ -83,7 +83,7 @@ if(process.argv[1]===fileURLToPath(import.meta.url)){
     console.log(`Gradient Descent Lab listening on http://${host}:${port}`);
     const missing=[!config.apiKey&&(config.providerName==='groq'?'GROQ_API_KEY':'ANTHROPIC_API_KEY'),!config.model&&'TUTOR_MODEL',!process.env.APP_ORIGIN&&'APP_ORIGIN',!process.env.STUDY_AI_TOKENS&&'STUDY_AI_TOKENS'].filter(Boolean);
     console.log(missing.length?`AI unavailable: configure ${missing.join(', ')}`:`AI configured: ${config.providerName} / ${config.model}. Run the tutor smoke test to verify connectivity.`);
-    const missingStore=[!storeCfg.repo&&'GITHUB_DATA_REPO',!storeCfg.token&&'GITHUB_DATA_TOKEN',!process.env.APP_ORIGIN&&'APP_ORIGIN'].filter(Boolean);
-    console.log(missingStore.length?`Submissions unavailable: configure ${missingStore.join(', ')}`:`Submissions configured: ${storeCfg.repo} (branch: ${storeCfg.branch}, path: ${storeCfg.pathPrefix||'(root)'}).`);
+    const missingStore=[!storeCfg.bucket&&'FIREBASE_STORAGE_BUCKET',!storeCfg.clientEmail&&'FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_SERVICE_ACCOUNT_PATH)',!process.env.APP_ORIGIN&&'APP_ORIGIN'].filter(Boolean);
+    console.log(missingStore.length?`Submissions unavailable: configure ${missingStore.join(', ')}`:`Submissions configured: Firebase Storage bucket ${storeCfg.bucket} (<condition>/<participantId>.json).`);
   });
 }

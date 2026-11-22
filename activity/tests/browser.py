@@ -33,7 +33,7 @@ try:
      fail_once['pending']=False
      route.fulfill(status=502,content_type='application/json',body=json.dumps({'error':'store_error'}))
      return
-    route.fulfill(status=200,content_type='application/json',body=json.dumps({'ok':True,'path':'submissions/P01-test.json','receivedAt':'2026-11-22T00:00:00Z'}))
+    route.fulfill(status=200,content_type='application/json',body=json.dumps({'ok':True,'path':f'{condition}/P01.json','receivedAt':'2026-11-22T00:00:00Z'}))
    page.route('**/api/tutor',mock_tutor);page.route('**/api/submit',mock_submit);consent(page,condition);assert not page.locator('#lesson').is_visible();assert page.locator('[data-export]').count()==0
    page.locator('#q5').fill(' draft\n preserved ');page.reload();assert page.locator('#q5').input_value()==' draft\n preserved '
    page.goto(BASE+'/?condition='+('ai' if condition=='control' else 'control'));assert state(page)['condition']==condition

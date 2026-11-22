@@ -79,22 +79,21 @@ To check the actual integration, configure real secrets, start an AI test sessio
 
 ## Scoring and centralized research collection
 
-When a participant submits the final feedback form, the browser automatically sends the complete participant JSON to `POST /api/submit` on the same origin. `server.mjs` validates the payload, attaches a server-side `receivedAt` timestamp, and commits `<participantId>-<sessionIdPrefix>.json` to a **private GitHub repository** via `submission-store.mjs`. Once the server confirms receipt, temporary session data in `localStorage` and `sessionStorage` is wiped automatically. There are no student-facing download/export buttons, and participants do not need to send any files. If a network error or Render cold-start timeout occurs during submission, temporary browser storage is retained until the participant clicks **Retry submission** (or refreshes) and the server confirms receipt.
+When a participant submits the final feedback form, the browser automatically sends the complete participant JSON to `POST /api/submit` on the same origin. `server.mjs` validates the payload, attaches a server-side `receivedAt` timestamp, and uploads it to **Firebase Storage** at `<condition>/<participantId>.json` (for example `control/P01.json` or `ai/P02.json`) via `submission-store.mjs`. Once the server confirms receipt, temporary session data in `localStorage` and `sessionStorage` is wiped automatically. There are no student-facing download/export buttons, and participants do not need to send any files. If a network error or Render cold-start timeout occurs during submission, temporary browser storage is retained until the participant clicks **Retry submission** (or refreshes) and the server confirms receipt.
 
 Configure centralized collection with these server environment variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `GITHUB_DATA_REPO` | Private GitHub repository in `owner/repo` format for storing submissions |
-| `GITHUB_DATA_TOKEN` | Fine-grained GitHub Personal Access Token with **Contents: Read and write** permission scoped only to `GITHUB_DATA_REPO` (server secret only) |
-| `GITHUB_DATA_BRANCH` | Target branch in the private data repository (defaults to `main`) |
-| `GITHUB_DATA_PATH` | Folder prefix inside the private data repository (defaults to `submissions`) |
+| `FIREBASE_STORAGE_BUCKET` | Firebase Storage bucket name from Firebase Console → Storage (e.g. `your-project.firebasestorage.app`, without `gs://`) |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Path to your downloaded Firebase Admin SDK service account `.json` file (ideal for Render **Secret Files** at `/etc/secrets/...` or local `.env`) |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Alternative to `FIREBASE_SERVICE_ACCOUNT_PATH`: raw or base64-encoded service account JSON stored directly as a server secret env var |
 | `APP_ORIGIN` | Exact browser origin allowed to call `/api/submit` and `/api/tutor` |
 
-Researchers access collected JSON files directly in the private GitHub repository (e.g. `git pull`). To generate combined `summary.csv` and `events.csv` tables across all collected sessions offline:
+Researchers access collected JSON files directly in the Firebase Console (**Storage → Files → `ai/` and `control/`**). After downloading collected JSON files locally, you can generate combined `summary.csv` and `events.csv` tables across all collected sessions offline:
 
 ```sh
-node export-csv.mjs /path/to/private-data-repo/submissions /path/to/output-dir
+node export-csv.mjs /path/to/downloaded-json-dir /path/to/output-dir
 ```
 
 1. **Participant JSON:** version, session/participant IDs, assigned condition, consent, prior experience, exact written answers/drafts/notes, submitted tests and scores, lesson snapshot and original event log, qualitative responses, phase timestamps/active estimates, interruption flags, unified events, rubric, gains, and server `receivedAt`.
@@ -158,11 +157,12 @@ For approximately 10 students, pilot with staggered sessions and examine exporte
 
 Use a Render **Web Service**, not a Static Site, so `/api/tutor` and the frontend share one HTTPS origin. No deployment has been performed.
 
-1. Create a **private** GitHub repository for collected participant outputs (e.g. `YOUR-ORG/cs411-study-data`, initialized with a README on `main`), and create a fine-grained GitHub Personal Access Token scoped **only** to that repository with **Contents: Read and write** permission.
+1. In Firebase Console, enable **Storage** and note your bucket name (e.g. `your-project.firebasestorage.app`). Download a Firebase Admin SDK service account `.json` key from **Project settings → Service accounts**. Never commit this `.json` file to GitHub.
 2. Connect the application repository to Render. Select Node runtime, root directory `activity`, build command `node --version`, start command `node server.mjs`, and the Free instance if offered to your account. This project needs no npm install or build.
-3. In Render's environment settings set `NODE_VERSION=22`, `HOST=0.0.0.0`, `TUTOR_PROVIDER=groq`, `TUTOR_MODEL=qwen/qwen3.8-27b`, `TUTOR_REASONING_EFFORT=none`, `GITHUB_DATA_REPO=YOUR-ORG/cs411-study-data`, `GITHUB_DATA_BRANCH=main`, `GITHUB_DATA_PATH=submissions`. Let Render supply `PORT`.
-4. Set `GROQ_API_KEY`, `STUDY_AI_TOKENS`, and `GITHUB_DATA_TOKEN` as server secrets. Set `APP_ORIGIN` to your assigned `https://YOUR-SERVICE.onrender.com` origin, without a trailing slash. Save/redeploy after the hostname is known. Never upload `.env` or research exports to the public code repository.
-5. Use the same origin for control and AI links, as documented above. Test AI requests and centralized submission from the public URL, and verify the JSON file appears in your private data repository. Keep the provider/model fixed throughout the experiment.
-6. Review host access-log handling for query strings containing study codes. No Render filesystem or database is used for participant collection; submissions are committed directly to your private GitHub data repository so they survive Render Free-tier restarts and spin-downs.
+3. In Render's **Secret Files**, upload your service account `.json` file (e.g. filename `firebase-service-account.json`, which Render mounts at `/etc/secrets/firebase-service-account.json`). Alternatively, paste its contents into the `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable.
+4. In Render's environment settings set `NODE_VERSION=22`, `HOST=0.0.0.0`, `TUTOR_PROVIDER=groq`, `TUTOR_MODEL=qwen/qwen3.8-27b`, `TUTOR_REASONING_EFFORT=none`, `FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app`, `FIREBASE_SERVICE_ACCOUNT_PATH=/etc/secrets/firebase-service-account.json`. Let Render supply `PORT`.
+5. Set `GROQ_API_KEY` and `STUDY_AI_TOKENS` as server secrets. Set `APP_ORIGIN` to your assigned `https://YOUR-SERVICE.onrender.com` origin, without a trailing slash. Save/redeploy after the hostname is known. Never upload `.env`, service account keys, or research exports to GitHub.
+6. Use the same origin for control and AI links, as documented above. Test AI requests and centralized submission from the public URL, and verify the JSON file appears in Firebase Storage at `<condition>/<participantId>.json`. Keep the provider/model fixed throughout the experiment.
+7. Review host access-log handling for query strings containing study codes. No Render filesystem or database is used for participant collection; submissions are uploaded directly to Firebase Storage so they survive Render Free-tier restarts and spin-downs.
 
 Render's [free services](https://render.com/docs/free) spin down after 15 minutes without traffic and can take time to wake up. A cold-start tutor request may exceed our timeout, including after a long inactive lesson period. Open and test the site before a scheduled session; if a cold start occurs, the participant sees an explicit failure/retry and the session is flagged. Free hosting is a pilot option, not a guarantee of uninterrupted study assistance. In-memory relay rate counters reset on restart; no personal data is retained on the host by this application. See [Render Web Services](https://render.com/docs/web-services) for current setup and limits.

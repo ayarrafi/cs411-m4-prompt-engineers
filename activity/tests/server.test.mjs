@@ -1,4 +1,4 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {createServer} from '../server.mjs';import {generateTutor} from '../tutor-provider.mjs';import {saveSubmission,submissionConfig,SubmissionStoreError} from '../submission-store.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {generateKeyPairSync} from 'node:crypto';import {createServer} from '../server.mjs';import {generateTutor} from '../tutor-provider.mjs';import {saveSubmission,submissionConfig,SubmissionStoreError} from '../submission-store.mjs';
 test('relay guards, provider contract, static allowlist, errors',async()=>{
   let calls=0;const server=createServer({env:{APP_ORIGIN:'http://study.test',ANTHROPIC_API_KEY:'test-only',TUTOR_MODEL:'test-model',STUDY_AI_TOKENS:'test-code'},provider:async()=>{calls++;return 'Compare two learning rates.';}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}`;
@@ -56,44 +56,49 @@ test('Groq-only configuration works; credentials are not served; rate limits rem
   }finally{await new Promise(r=>server.close(r));}
   assert.throws(()=>createServer({env:{TUTOR_PROVIDER:'typo'}}),/TUTOR_PROVIDER/);
 });
-test('submission store config validation, GitHub Contents PUT, idempotent retry, error sanitization',async()=>{
-  assert.throws(()=>submissionConfig({GITHUB_DATA_REPO:'not-a-repo'}),/GITHUB_DATA_REPO/);
-  assert.throws(()=>submissionConfig({GITHUB_DATA_REPO:'org/data',GITHUB_DATA_PATH:'../escape'}),/GITHUB_DATA_PATH/);
-  const cfg=submissionConfig({GITHUB_DATA_REPO:'org/study-data',GITHUB_DATA_TOKEN:'ghp_secret',GITHUB_DATA_BRANCH:'main',GITHUB_DATA_PATH:'/results/'});
-  assert.equal(cfg.configured,true);assert.equal(cfg.pathPrefix,'results');
+test('Firebase Storage config validation, JWT auth, upload to <condition>/<userId>.json, error sanitization',async()=>{
+  const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}});
+  const saJson=JSON.stringify({client_email:'study@test-proj.iam.gserviceaccount.com',private_key:privateKey,token_uri:'https://oauth2.googleapis.com/token'});
+
+  assert.throws(()=>submissionConfig({FIREBASE_STORAGE_BUCKET:'bad/bucket'}),/FIREBASE_STORAGE_BUCKET/);
+  assert.throws(()=>submissionConfig({FIREBASE_STORAGE_BUCKET:'my-proj.firebasestorage.app',FIREBASE_SERVICE_ACCOUNT_JSON:'not-json'}),/service account/);
+  const cfg=submissionConfig({FIREBASE_STORAGE_BUCKET:'gs://my-proj.firebasestorage.app/',FIREBASE_SERVICE_ACCOUNT_JSON:saJson});
+  assert.equal(cfg.configured,true);assert.equal(cfg.bucket,'my-proj.firebasestorage.app');
+  // Base64-encoded service account JSON is also accepted.
+  const cfgB64=submissionConfig({FIREBASE_STORAGE_BUCKET:'my-proj.firebasestorage.app',FIREBASE_SERVICE_ACCOUNT_JSON:Buffer.from(saJson).toString('base64')});
+  assert.equal(cfgB64.configured,true);
 
   const calls=[];
   const sample={schemaVersion:'cs411-m4-v1',sessionId:'12345678-abcd-ef01-2345-67890abcdef0',participantId:'P01',condition:'control',phase:'complete'};
   const saved=await saveSubmission({submission:sample,...cfg,fetchImpl:async(url,options)=>{
-    calls.push({url,method:options.method,body:options.body,auth:options.headers.Authorization});
-    return {ok:true,status:201,json:async()=>({commit:{sha:'abc123'}})};
+    calls.push({url,method:options.method,headers:options.headers,body:options.body});
+    if(url==='https://oauth2.googleapis.com/token'){
+      assert.ok(options.body.includes('grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer'));
+      return {ok:true,status:200,json:async()=>({access_token:'ya29.fake-token',expires_in:3600})};
+    }
+    return {ok:true,status:200,json:async()=>({name:'control/P01.json',generation:'12345'})};
   }});
-  assert.equal(saved.path,'results/P01-12345678.json');assert.equal(saved.commitSha,'abc123');
-  assert.equal(calls.length,1);assert.equal(calls[0].url,'https://api.github.com/repos/org/study-data/contents/results/P01-12345678.json');
-  assert.equal(calls[0].auth,'Bearer ghp_secret');assert.ok(!calls[0].body.includes('ghp_secret'));
-  const decoded=JSON.parse(Buffer.from(JSON.parse(calls[0].body).content,'base64').toString('utf8'));
-  assert.equal(decoded.participantId,'P01');
+  assert.equal(saved.path,'control/P01.json');assert.equal(saved.generation,'12345');
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].url,'https://storage.googleapis.com/upload/storage/v1/b/my-proj.firebasestorage.app/o?uploadType=media&name=control%2FP01.json');
+  assert.equal(calls[1].headers.Authorization,'Bearer ya29.fake-token');
+  assert.ok(!calls[1].body.includes('PRIVATE KEY'));
+  assert.equal(JSON.parse(calls[1].body).participantId,'P01');
 
-  // Idempotent retry: 422 on initial PUT -> GET existing sha -> PUT with sha succeeds.
-  let step=0;
-  const retried=await saveSubmission({submission:sample,...cfg,fetchImpl:async(url,options)=>{
-    step++;
-    if(step===1){assert.equal(options.method,'PUT');return {ok:false,status:422};}
-    if(step===2){assert.equal(options.method,'GET');assert.ok(url.endsWith('?ref=main'));return {ok:true,status:200,json:async()=>({sha:'existing-sha'})};}
-    assert.equal(options.method,'PUT');assert.equal(JSON.parse(options.body).sha,'existing-sha');
-    return {ok:true,status:200,json:async()=>({commit:{sha:'def456'}})};
-  }});
-  assert.equal(retried.commitSha,'def456');assert.equal(step,3);
-
-  for(const [status,code] of [[401,'store_auth_error'],[403,'store_auth_error'],[404,'store_repo_error'],[429,'store_rate_limited'],[500,'store_error']]){
-    await assert.rejects(saveSubmission({submission:sample,...cfg,fetchImpl:async()=>({ok:false,status})}),e=>e instanceof SubmissionStoreError&&e.code===code);
+  for(const [status,code] of [[401,'store_auth_error'],[403,'store_auth_error'],[404,'store_bucket_error'],[429,'store_rate_limited'],[500,'store_error']]){
+    await assert.rejects(saveSubmission({submission:sample,...cfg,fetchImpl:async(url)=>{
+      if(url==='https://oauth2.googleapis.com/token')return {ok:true,status:200,json:async()=>({access_token:'tok'})};
+      return {ok:false,status};
+    }}),e=>e instanceof SubmissionStoreError&&e.code===code);
   }
 });
 test('/api/submit guards, works without AI tokens, strips token, blocks server files',async()=>{
+  const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}});
+  const saJson=JSON.stringify({client_email:'study@test-proj.iam.gserviceaccount.com',private_key:privateKey});
   const stored=[];
   const server=createServer({
-    env:{APP_ORIGIN:'http://study.test',GITHUB_DATA_REPO:'org/study-data',GITHUB_DATA_TOKEN:'ghp_test'},
-    store:async({submission,repo})=>{stored.push({submission,repo});return {path:'submissions/P01-12345678.json',commitSha:'sha1'};}
+    env:{APP_ORIGIN:'http://study.test',FIREBASE_STORAGE_BUCKET:'my-proj.firebasestorage.app',FIREBASE_SERVICE_ACCOUNT_JSON:saJson},
+    store:async({submission,bucket})=>{stored.push({submission,bucket});return {path:`${submission.condition}/${submission.participantId}.json`,generation:'1'};}
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const url=`http://127.0.0.1:${server.address().port}`;
@@ -107,8 +112,8 @@ test('/api/submit guards, works without AI tokens, strips token, blocks server f
     assert.equal((await post({...valid,participantId:'../bad'})).status,400);
     const res=await post(valid);
     assert.equal(res.status,200);
-    const json=await res.json();assert.equal(json.ok,true);assert.equal(json.path,'submissions/P01-12345678.json');assert.ok(json.receivedAt);
-    assert.equal(stored.length,1);assert.equal(stored[0].repo,'org/study-data');assert.equal(stored[0].submission.token,undefined);assert.equal(stored[0].submission.receivedAt,json.receivedAt);
+    const json=await res.json();assert.equal(json.ok,true);assert.equal(json.path,'control/P01.json');assert.ok(json.receivedAt);
+    assert.equal(stored.length,1);assert.equal(stored[0].bucket,'my-proj.firebasestorage.app');assert.equal(stored[0].submission.token,undefined);assert.equal(stored[0].submission.receivedAt,json.receivedAt);
   }finally{await new Promise(r=>server.close(r));}
 
   // Unconfigured submission store returns 503 explicitly.
