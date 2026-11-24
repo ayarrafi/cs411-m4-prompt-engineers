@@ -534,7 +534,7 @@ function fillThread(t,st){
   t.innerHTML="";
   const th=S.threads[st.id]||[];
   if(!th.length){ t.appendChild(el("p",{class:"hintline"}, st.type==="explore" ? (aiLive()?"Stuck or curious? Ask the tutor, or press “I'm stuck”.":"Press “Get a hint” if you want a suggestion.") : "Feedback appears here after each attempt.")); return; }
-  for(const x of th){ const d=el("div",{class:"msg "+x.who+(x.cls?" "+x.cls:"")}); d.appendChild(el("span",{class:"who"},x.who==="t"?"Tutor":"You")); d.appendChild(document.createTextNode(x.text)); t.appendChild(d); if(x.note) t.appendChild(el("p",{class:"note"},esc(x.note))); }
+  for(const x of th){ const d=el("div",{class:"msg "+x.who+(x.cls?" "+x.cls:"")}); d.appendChild(el("span",{class:"who"},x.who==="t"?"Tutor":"You")); d.appendChild(document.createTextNode(x.text)); if(S.cond==="ai" && x.who==="t" && !x.unavailable) window.TutorMath.render(d); t.appendChild(d); if(x.note) t.appendChild(el("p",{class:"note"},esc(x.note))); }
   t.scrollTop=t.scrollHeight;
 }
 function refreshThread(st){ const t=document.querySelector(".thread"); if(t) fillThread(t,st); else renderPanel(); }

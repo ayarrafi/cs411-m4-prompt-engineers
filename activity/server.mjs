@@ -1,5 +1,5 @@
 import http from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {timingSafeEqual} from 'node:crypto';
@@ -7,7 +7,9 @@ import {generateTutor,tutorConfig,TutorProviderError} from './tutor-provider.mjs
 import {saveSubmission,submissionConfig,SubmissionStoreError} from './submission-store.mjs';
 const directory=dirname(fileURLToPath(import.meta.url));
 const assets=new Map([['/','gradient-descent-lab.html'],...['gradient-descent-lab.html','lesson.js','math.js','study.js','study-core.js','study.css'].map(x=>['/'+x,x])]);
-const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8'};
+for(const name of ['katex.min.js','katex.min.css','contrib/auto-render.min.js',...(await readdir(join(directory,'vendor/katex/fonts'))).filter(n=>/\.(woff2?|ttf)$/.test(n)).map(n=>'fonts/'+n)]) assets.set('/vendor/katex/'+name,'vendor/katex/'+name);
+assets.set('/tutor-math.js','tutor-math.js');
+const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',woff2:'font/woff2',woff:'font/woff',ttf:'font/ttf'};
 const same=(a,b)=>typeof a==='string'&&Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const MAX_SUBMIT_BYTES=2*1024*1024;
 export function createServer({env=process.env,provider=generateTutor,store=saveSubmission}={}){

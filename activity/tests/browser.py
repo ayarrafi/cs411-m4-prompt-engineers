@@ -10,6 +10,29 @@ try:
   except Exception:time.sleep(.1)
  with sync_playwright() as p:
   browser=p.chromium.launch(executable_path=os.environ.get('CHROME_PATH','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),headless=True)
+  # Local KaTeX assets, safe malformed input, math delimiters and mobile layout.
+  math_ctx=browser.new_context(viewport={'width':390,'height':844});math_page=math_ctx.new_page()
+  math_errors=[];math_page.on('pageerror',lambda e:math_errors.append(str(e)))
+  math_page.goto(BASE)
+  result=math_page.evaluate(r'''() => {
+    const box=document.createElement('div');box.className='msg';document.body.append(box);
+    box.textContent=String.raw`Inline \(x_{t+1}=x_t-\eta f'(x_t)\), $x^2$, display \[\frac{1}{2}\] and $$\eta=0.1$$. <img src=x onerror=alert(1)>`;
+    TutorMath.render(box);
+    const count=box.querySelectorAll('.katex').length;
+    const accessible=box.querySelectorAll('math').length;
+    const safe=!box.querySelector('img');
+    box.textContent=String.raw`Malformed \(\frac{1}{\) and \(\href{javascript:alert(1)}{click}\)`;
+    TutorMath.render(box);
+    const blocked=!box.querySelector('a');
+    const readable=box.textContent.includes('Malformed');
+    const renderer=window.renderMathInElement;window.renderMathInElement=undefined;
+    box.textContent='Plain fallback';TutorMath.render(box);
+    const fallback=box.textContent==='Plain fallback';window.renderMathInElement=renderer;
+    box.remove();return {count,accessible,safe,blocked,readable,fallback};
+  }''')
+  assert result=={'count':4,'accessible':4,'safe':True,'blocked':True,'readable':True,'fallback':True},result
+  assert not math_errors,math_errors
+  math_ctx.close()
   def state(page):return page.evaluate('(key)=>JSON.parse(localStorage.getItem(key))',KEY)
   def consent(page,c):
    page.goto(BASE+'/?condition='+c+'&pid=P01');page.locator('[name=agree]').check();page.get_by_role('button',name='Consent and begin pre-test').click()
@@ -25,7 +48,7 @@ try:
    ctx=browser.new_context(reduced_motion='reduce');page=ctx.new_page();errors=[];requests=[];submissions=[];downloads=[]
    page.on('pageerror',lambda e:errors.append(str(e)));page.on('dialog',lambda d:d.accept());page.on('download',lambda dl:downloads.append(dl))
    def mock_tutor(route):
-    requests.append(route.request.post_data_json);route.fulfill(status=200,content_type='application/json',body=json.dumps({'text':'Compare the first two rows of the table.','provider':'groq','model':'qwen/qwen3.8-27b'}))
+    requests.append(route.request.post_data_json);route.fulfill(status=200,content_type='application/json',body=json.dumps({'text':r"Compare the first two rows of the table. What is the sign of \(f'(x)\)?",'provider':'groq','model':'qwen/qwen3.8-27b'}))
    fail_once={'pending':condition=='control'}
    def mock_submit(route):
     submissions.append(route.request.post_data_json)
@@ -39,7 +62,7 @@ try:
    page.goto(BASE+'/?condition='+('ai' if condition=='control' else 'control'));assert state(page)['condition']==condition
    assessment(page);page.locator('#runBtn').wait_for();assert not page.locator('#condAI').count()
    for rate in [.1,.5,.9]:slider(page,'lr',rate);page.locator('#runBtn').click()
-   if condition=='ai':page.get_by_role('button',name="I'm stuck",exact=True).click();page.locator('.msg.t').filter(has_text='Compare the first two rows of the table.').wait_for()
+   if condition=='ai':page.get_by_role('button',name="I'm stuck",exact=True).click();page.locator('.msg.t').filter(has_text='Compare the first two rows of the table.').wait_for();assert page.locator('.msg.t .katex').count()>0
    else:page.get_by_text('Predefined hint 1',exact=True).click()
    page.reload();page.locator('#runBtn').wait_for();assert len(state(page)['lesson']['state']['runs']['explore'])==3
    page.get_by_role('button',name='Continue to the theory').click()
