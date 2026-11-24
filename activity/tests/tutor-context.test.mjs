@@ -3,7 +3,9 @@ test('bounded context excludes study records, early keys and excess conversation
  const p=tutorPayload({stage:'theory',hintLevel:1,keyIdea:'secret answer',pre:{q1:'B'},post:{q1:'A'},participantId:'P01',studentText:'x'.repeat(2000)},Array.from({length:10},()=>({role:'user',content:'y'.repeat(2000)})));
  assert.equal(p.context.pre,undefined);assert.equal(p.context.post,undefined);assert.equal(p.context.participantId,undefined);assert.equal(p.context.keyIdea,undefined);assert.equal(p.context.studentText.length,600);assert.equal(p.conversation.length,4);assert.equal(p.conversation[0].content.length,400);
  for(const stage of ['pre','post','assess'])assert.throws(()=>tutorPayload({stage},[]));
- assert.equal(tutorPayload({stage:'missions',hintLevel:3,keyIdea:'guidance'},[]).context.keyIdea,'guidance');
+ assert.equal(tutorPayload({stage:'missions',hintLevel:3,keyIdea:'guidance',minima:[{x:1}]},[]).context.keyIdea,undefined);
+ assert.equal(tutorPayload({stage:'missions',situation:'explain',keyIdea:'guidance'},[]).context.keyIdea,'guidance');
+ assert.equal(tutorPayload({stage:'missions',minima:[{x:1}]},[]).context.minima,undefined);
 });
 test('realistic scenarios retain context and use bounded non-thinking requests (mocked model)',async()=>{
  for(const scenario of scenarios){

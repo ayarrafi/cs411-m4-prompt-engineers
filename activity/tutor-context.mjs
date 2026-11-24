@@ -13,8 +13,9 @@ export function tutorPayload(context,conversation){
   if(!context||!['explore','theory','missions'].includes(context.stage))throw new Error('invalid_learning_context');
   const clean=Object.fromEntries(fields.filter(k=>context[k]!==undefined).map(k=>[k,bound(context[k])]));
   clean.hintLevel=Math.max(0,Math.min(3,Number(context.hintLevel)||0));
-  // The model does not need exact answer keys before a student has struggled.
-  if(clean.stage==='explore'||(clean.hintLevel<3&&clean.situation!=='explain'))delete clean.keyIdea;
+  // Withhold answer keys until the student has submitted their own explanation.
+  delete clean.minima; // Exact target positions can disclose successful settings.
+  if(clean.stage==='explore'||clean.situation!=='explain')delete clean.keyIdea;
   const history=(Array.isArray(conversation)?conversation:[]).filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').slice(-4).map(m=>({role:m.role,content:m.content.slice(0,400)}));
   return {context:clean,conversation:history};
 }
