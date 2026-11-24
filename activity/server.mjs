@@ -6,7 +6,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {generateTutor,tutorConfig,TutorProviderError} from './tutor-provider.mjs';
 import {saveSubmission,submissionConfig,SubmissionStoreError} from './submission-store.mjs';
 const directory=dirname(fileURLToPath(import.meta.url));
-const assets=new Map([['/','gradient-descent-lab.html'],...['gradient-descent-lab.html','lesson.js','math.js','study.js','study-core.js','study.css'].map(x=>['/'+x,x])]);
+const assets=new Map([['/','gradient-descent-lab.html'],...['gradient-descent-lab.html','lesson.js','math.js','study.js','study-core.js','process-metrics.js','study.css'].map(x=>['/'+x,x])]);
 for(const name of ['katex.min.js','katex.min.css','contrib/auto-render.min.js',...(await readdir(join(directory,'vendor/katex/fonts'))).filter(n=>/\.(woff2?|ttf)$/.test(n)).map(n=>'fonts/'+n)]) assets.set('/vendor/katex/'+name,'vendor/katex/'+name);
 assets.set('/tutor-math.js','tutor-math.js');
 const mime={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',woff2:'font/woff2',woff:'font/woff',ttf:'font/ttf'};

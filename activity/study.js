@@ -35,7 +35,7 @@ function finishLearning(status){
   event('learning_end',{status,incompleteSteps:d.incompleteSteps});persist();render();
 }
 function buildPayload(){
-  return {...d,exportedAt:Date.now(),scoringRubric:C.rubric,gains:C.gains(d.tests.pre?.score.total,d.tests.post?.score.total)};
+  return {...d,...ProcessMetrics.derive(d),exportedAt:Date.now(),scoringRubric:C.rubric,gains:C.gains(d.tests.pre?.score.total,d.tests.post?.score.total)};
 }
 async function submitResults(){
   if(!d||submissionState==='submitting'||submitted)return;

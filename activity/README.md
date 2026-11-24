@@ -172,3 +172,7 @@ Render's [free services](https://render.com/docs/free) spin down after 15 minute
 See [FEEDBACK-CHECKLIST.md](FEEDBACK-CHECKLIST.md) for implementation status, proposed report wording and quantitative JSON metrics. The AI tutor is a guided reasoning coach: one cue/question at a time, no computed answers or exact successful settings at any hint level. Exact minima and answer keys before the explanation phase are excluded from provider context. These safeguards still require a live pedagogical pilot.
 
 AI tutor math is rendered with locally vendored KaTeX 0.19.1 (MIT), including inline and display delimiters. No CDN/network permission or extra Render build command is needed. Original tutor text remains unchanged in research logs. Control support remains unchanged.
+
+### Derived process metrics and manual coding extracts
+
+Completed submission JSON now includes `processMetrics` (versioned counts, rates, scores, timing and quality flags) and `qualitativeSegments` (unlabelled text with task/evidence links). Raw records are unchanged. See [PROCESS-METRICS.md](PROCESS-METRICS.md) for definitions, denominators and missing-data limitations. To enrich older JSON offline, run `node analyze-session.mjs participant.json > participant-enriched.json`. Manual grading recalculates the derived scores automatically.

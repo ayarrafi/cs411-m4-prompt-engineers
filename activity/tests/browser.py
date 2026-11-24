@@ -52,6 +52,13 @@ try:
    fail_once={'pending':condition=='control'}
    def mock_submit(route):
     submissions.append(route.request.post_data_json)
+    payload=route.request.post_data_json
+    assert payload['processMetrics']['metricsVersion']=='1.0.0'
+    assert payload['processMetrics']['preScore'] is None
+    assert payload['processMetrics']['normalizedGain'] is None
+    assert payload['processMetrics']['totalSimulationRuns']>0
+    assert len(payload['qualitativeSegments'])>0
+    assert 'events' in payload and 'lesson' in payload
     if fail_once['pending']:
      fail_once['pending']=False
      route.fulfill(status=502,content_type='application/json',body=json.dumps({'error':'store_error'}))

@@ -13,7 +13,7 @@ Checked against the pulled repository on 2026-11-24. Checked items describe loca
 - [ ] Agree judgeable recruitment inclusion/exclusion criteria and screening questions. For example: BA3 enrollment; completed a course covering derivatives; no previous course assignment or project implementing gradient descent. These are proposals, not current screening rules.
 - [ ] Update the report's Mann–Whitney plan to the instructor's requested ANOVA; specify the outcome, factors, assumptions, missing-data handling and effect size with the teaching staff before analysis.
 - [ ] Predefine handling of AI outages, incomplete sessions, external assistance and perfect pre-test scores before inspecting group outcomes.
-- [ ] Implement the proposed derived JSON process summary, with tests and metric definitions; the current raw events already support most metrics.
+- [x] Implement derived JSON process metrics and qualitative segments, with offline enrichment and tests. See PROCESS-METRICS.md for implemented definitions.
 - [ ] Pilot the complete submission flow and confirm the researcher can retrieve the JSON from Firebase Storage.
 
 ## Suggested report wording
@@ -22,9 +22,9 @@ Checked against the pulled repository on 2026-11-24. Checked items describe loca
 
 **RQ2:** How do the conditions differ in simulation attempts, parameter changes between consecutive runs, prediction accuracy, and help-seeking frequency? Use open-ended explanations to interpret these observed behaviors, without treating click counts as proof of understanding.
 
-## Proposed quantitative JSON summary (not yet implemented)
+## Original quantitative JSON proposal (superseded by PROCESS-METRICS.md)
 
-The pulled version automatically sends `buildPayload()` to `/api/submit`, which stores JSON in Firebase Storage. It no longer offers participant downloads. Add a derived `processMetrics` object to that payload (or compute it offline from downloaded researcher JSON). Preserve the original events. Do not send this summary or assessment records to the model.
+The pulled version automatically sends `buildPayload()` to `/api/submit`, which stores JSON in Firebase Storage. It no longer offers participant downloads. The derived `processMetrics` object is now added to that payload and can also be computed offline. The table below is the original proposal; PROCESS-METRICS.md documents the implemented field names and definitions. Preserve the original events. Do not send this summary or assessment records to the model.
 
 Use `events` entries with `type: "lesson_event"` and their `detail` objects as the single source for lesson counts. Do not also count `lesson.state.log`: that duplicates records. Keep aggregate and per-step metrics, with a `metricsVersion` and explicit missing values for unavailable observations in older files.
 

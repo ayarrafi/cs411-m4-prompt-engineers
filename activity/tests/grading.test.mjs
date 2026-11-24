@@ -8,6 +8,6 @@ test('offline grading blinds condition, validates rubric, and computes valid gai
   const command=fileURLToPath(new URL('../grade.mjs',import.meta.url));
   const review=JSON.parse(execFileSync(process.execPath,[command,p]));assert.equal(review.condition,undefined);assert.equal(review.tests.pre.q5,'Explanation');
   await writeFile(g,JSON.stringify({sessionId:'session-test',pre:{q3c:1,q5:[1,1,1]},post:{q3c:1,q5:[1,1,1]}}));
-  const graded=JSON.parse(execFileSync(process.execPath,[command,p,g]));assert.equal(graded.tests.pre.score.total,9);assert.equal(graded.gains.raw,0);assert.equal(graded.gains.normalized,null);
+  const graded=JSON.parse(execFileSync(process.execPath,[command,p,g]));assert.equal(graded.tests.pre.score.total,9);assert.equal(graded.gains.raw,0);assert.equal(graded.gains.normalized,null);assert.equal(graded.processMetrics.preScore,9);assert.equal(graded.processMetrics.normalizedGain,null);
  }finally{await rm(dir,{recursive:true,force:true});}
 });

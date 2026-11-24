@@ -3,6 +3,7 @@
 // node grade.mjs participant.json grades.json > graded-participant.json
 import {readFile} from 'node:fs/promises';
 import C from './study-core.js';
+import P from './process-metrics.js';
 const [participantPath,gradesPath]=process.argv.slice(2);
 if(!participantPath)throw new Error('Usage: node grade.mjs participant.json [grades.json]');
 const d=JSON.parse(await readFile(participantPath,'utf8'));
@@ -20,5 +21,5 @@ if(!gradesPath){
   }
   d.manualGrading={gradedAt:new Date().toISOString(),source:'researcher_supplied_rubric_scores'};
   d.gains=C.gains(d.tests.pre.score.total,d.tests.post.score.total);
-  console.log(JSON.stringify(d,null,2));
+  console.log(JSON.stringify({...d,...P.derive(d)},null,2));
 }
