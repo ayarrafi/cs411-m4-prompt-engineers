@@ -166,3 +166,9 @@ Use a Render **Web Service**, not a Static Site, so `/api/tutor` and the fronten
 7. Review host access-log handling for query strings containing study codes. No Render filesystem or database is used for participant collection; submissions are uploaded directly to Firebase Storage so they survive Render Free-tier restarts and spin-downs.
 
 Render's [free services](https://render.com/docs/free) spin down after 15 minutes without traffic and can take time to wake up. A cold-start tutor request may exceed our timeout, including after a long inactive lesson period. Open and test the site before a scheduled session; if a cold start occurs, the participant sees an explicit failure/retry and the session is flagged. Free hosting is a pilot option, not a guarantee of uninterrupted study assistance. In-memory relay rate counters reset on restart; no personal data is retained on the host by this application. See [Render Web Services](https://render.com/docs/web-services) for current setup and limits.
+
+### Teaching feedback follow-up
+
+See [FEEDBACK-CHECKLIST.md](FEEDBACK-CHECKLIST.md) for implementation status, proposed report wording and quantitative JSON metrics. The AI tutor is a guided reasoning coach: one cue/question at a time, no computed answers or exact successful settings at any hint level. Exact minima and answer keys before the explanation phase are excluded from provider context. These safeguards still require a live pedagogical pilot.
+
+AI tutor math is rendered with locally vendored KaTeX 0.19.1 (MIT), including inline and display delimiters. No CDN/network permission or extra Render build command is needed. Original tutor text remains unchanged in research logs. Control support remains unchanged.
