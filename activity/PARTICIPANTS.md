@@ -39,18 +39,18 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 
 | ID | Initials | Sex | Degree / field | Year / semester | Derivatives experience (0-5) | Gradient descent experience (0-5) | Additional notes |
 |---|---|---|---|---|---|---|---|
-| P01 | | | | | | | |
-| P02 | | | | | | | |
-| P03 | | | | | | | |
+| P01 |J.M.|M|HEC BA|3|3|0| |
+| P02 |B.|M|EPFL-MATH MA|1|5|2| |
+| P03 |N.C.|M|HEC MA|1|3|0| |
 | P04 | | | | | | | |
 | P05 | | | | | | | |
 | P06 | | | | | | | |
 | P07 | | | | | | | |
 | P08 | | | | | | | |
 | P09 | | | | | | | |
-| P10 | | | | | | | |
-| P11 | | | | | | | |
-| P12 | | | | | | | |
+| P10 |E.D.|M|HEC BA|1|1|0| |
+| P11 |M.Z.|M|HEC BA|3|4|0| |
+| P12 |M.R.|M|EPFL-CS BA|2|4|2| |
 | P13 | | | | | | | |
 | P14 | | | | | | | |
 | P15 | | | | | | | |
