@@ -11,7 +11,7 @@ cd activity
 node server.mjs
 ```
 
-Open `http://127.0.0.1:8080/?condition=control&pid=P01` or `http://127.0.0.1:8080/?condition=ai&pid=P02`. Without AI configuration, AI requests explicitly fail and flag the session. The control condition works without an AI service. Use a different browser profile/private window for each test participant. There is deliberately no condition switcher or restart button. A completed participant can remove their recovery copy after downloading/delivering the data. For development only, clear this origin's local storage to start a fresh test.
+Open `http://127.0.0.1:8080/?condition=control&pid=P01` or `http://127.0.0.1:8080/?condition=ai&pid=P11`. Without AI configuration, AI requests explicitly fail and flag the session. The control condition works without an AI service. Use a different browser profile/private window for each test participant. There is deliberately no condition switcher or restart button. A completed participant can remove their recovery copy after downloading/delivering the data. For development only, clear this origin's local storage to start a fresh test.
 
 The same origin retains one session. Returning with another condition link resumes the stored condition and logs/flags the mismatch. Web Locks prevent conflicting tabs in supported browsers. When Web Locks are unavailable, the session is flagged; instruct participants to use one tab. Modern Chrome, Firefox, or Safari with JavaScript and storage is required. Do not open the HTML via `file://`.
 
@@ -26,6 +26,23 @@ The same origin retains one session. Returning with another condition link resum
 Static-only hosting can run the study and control support, but **cannot deliver the AI condition** without routing `/api/tutor` to this server (or an equivalent authenticated same-origin relay). Do not call a static-only AI deployment operational.
 
 URL parameters and local storage are **not tamper-proof assignment or assessment security**. A technically knowledgeable participant can inspect answer keys, edit storage, change the clock, clear the session, or call the relay with a valid code. No server-side participant/session database is implemented. If adversarial enforcement is required, implement server-issued assignments, phase authorization, and durable rate limits before recruitment. The existing relay denies assessment stage requests but cannot verify the real browser phase. Control participants are not issued relay codes.
+
+## Participant IDs and distribution links
+
+For the 20-participant study, use these non-overlapping ID ranges:
+
+| Participant IDs | Condition | Expected storage path |
+|---|---|---|
+| P01–P10 | Control / predefined support | `control/<ID>.json` |
+| P11–P20 | AI tutor | `ai/<ID>.json` |
+
+P10 belongs to control only. Assign people to conditions outside the app, then give each person an unused ID from the relevant range. The URL's `condition` parameter selects the condition; the ID range is a researcher convention, not an enforced restriction. Keep the allocation list private. Because the ranges reveal the condition, remove participant IDs as well as condition labels from grader-facing materials, using a separate blind code if needed.
+
+Copy-paste links are in the local [PARTICIPANT-LINKS.local.md](PARTICIPANT-LINKS.local.md) file. It contains study access codes and is intentionally ignored by Git, so it will not be available in a fresh clone. Send each person only their assigned link. The public app is https://cs-411-gradient-descent-lab.onrender.com.
+
+Use a unique ID for each session: another submission with the same condition and ID overwrites the same stored file. Use a distinct suffix (for example `P11_RETEST`) for an approved retest. IDs beginning with `TEST_` are synthetic test sessions and must be excluded from analysis.
+
+AI links must contain a study code configured in Render's `STUDY_AI_TOKENS`. When several links use the same code, they share its rate and total-request limits; different participant IDs do not create separate quotas. The links file must be regenerated or updated if that code changes.
 
 ## Configure and test AI
 
