@@ -13,10 +13,10 @@ function sub(k){return String(k).split("").map(d=>"₀₁₂₃₄₅₆₇₈�
 
 /* ================= lesson content ================= */
 const STAGES=[
-  {id:"explore", name:"Explore", min:7},
-  {id:"theory",  name:"Theory", min:7},
-  {id:"missions",name:"Missions", min:12},
-  {id:"assess",  name:"Transfer check", min:4}
+  {id:"explore", name:"Explore"},
+  {id:"theory",  name:"Theory"},
+  {id:"missions",name:"Missions"},
+  {id:"assess",  name:"Transfer check"}
 ];
 const EXPLORE_HINTS=[
   "Run the ball with η = 0.1, then with η = 0.5. What changes about the steps?",
@@ -217,16 +217,15 @@ function animate(done){
   S.anim=setInterval(()=>{ S.shown++; draw(); renderTable(); if(S.shown>=S.xs.length){ clearInterval(S.anim); S.anim=null; done(); } }, S.xs.length>14?170:S.xs.length>8?250:340);
 }
 
-/* ================= track & clock ================= */
+/* ================= stage progress ================= */
 function renderTrack(){
   const t=$("track"); t.innerHTML="";
   STAGES.forEach(sg=>{ const steps=STEPS.map((s,i)=>({s,i})).filter(o=>o.s.stage===sg.id); const isCur=cur()&&cur().stage===sg.id;
-    const box=el("div",{class:"stage"+(isCur?" cur":"")}); box.appendChild(el("span",{class:"sname"},`${esc(sg.name)} · ${sg.min} min`));
+    const box=el("div",{class:"stage"+(isCur?" cur":"")}); box.appendChild(el("span",{class:"sname"},esc(sg.name)));
     const pips=el("div",{class:"pips"}); let n=0;
     steps.forEach(({s,i})=>{ const lab=s.type==="rule"?"rule":s.type==="explore"?"go":s.type==="assess"?"✓":String(++n); pips.appendChild(el("span",{class:"pip"+(i===S.i?" cur":"")+(S.results[s.id]?.done?" done":""),title:s.title},lab)); });
     box.appendChild(pips); t.appendChild(box); });
 }
-setInterval(()=>{ const c=document.querySelector(".clock"); if(!c||!cur()) return; const sg=STAGES.find(s=>s.id===cur().stage); const sec=Math.floor((Date.now()-S.stageStart)/1000); c.textContent=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")} / ~${sg.min}:00`; },1000);
 
 /* ================= panel ================= */
 function head(box,st){
@@ -235,7 +234,7 @@ function head(box,st){
   let label=sg.name;
   if(st.type==="mission"){ label+=` · Mission ${STEPS.filter(s=>s.type==="mission").indexOf(st)+1} of 4`; }
   if(st.type==="check"){ label+=" · Check"; }
-  row.appendChild(el("span",{class:"eyebrow"},esc(label))); row.appendChild(el("span",{class:"clock"},""));
+  row.appendChild(el("span",{class:"eyebrow"},esc(label)));
   box.appendChild(row);
   box.appendChild(el("h2",{class:"mtitle"},esc(st.title)));
   box.appendChild(el("p",{class:"brief"},esc(st.brief)));
@@ -251,7 +250,6 @@ function renderPanel(){
   head(box,st);
   ({explore:renderExplore, rule:renderRule, check:renderCheck, mission:renderMission, assess:renderAssess})[st.type](box,st);
   if(focusedId) document.getElementById(focusedId)?.focus({preventScroll:true});
-  const clock=document.querySelector(".clock"); if(clock){ const sg=STAGES.find(s=>s.id===st.stage); const sec=Math.floor((Date.now()-S.stageStart)/1000); clock.textContent=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")} / ~${sg.min}:00`; }
 }
 
 /* ---- explore ---- */
