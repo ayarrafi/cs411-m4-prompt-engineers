@@ -42,20 +42,20 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 | P01 | | | | | | | |
 | P02 |B.|M|EPFL-MATH MA|1|5|2| |
 | P03 |N.C.|M|HEC MA|1|3|0| |
-| P04 | | | | | | | |
-| P05 | | | | | | | |
-| P06 | | | | | | | |
-| P07 | | | | | | | |
+| P04 |A. D.|F|EPFL-CE BA|3|5|?| |
+| P05 |F. P.|M|HEC BA|3|5|?| |
+| P06 |C. B.|M|MICRO MA|2|5|3| |
+| P07 |K.|?|?|?|?|?| |
 | P08 | | | | | | | |
 | P09 | | | | | | | |
 | P10 |E.D.|M|HEC BA|1|1|0| |
 | P11 |M.Z.|M|HEC BA|3|4|0| |
 | P12 |M.R.|M|EPFL-CS BA|2|4|2| |
 | P13 |J.M.|M|HEC BA|3|3|0| |
-| P14 | | | | | | | |
-| P15 | | | | | | | |
-| P16 | | | | | | | |
-| P17 | | | | | | | |
+| P14 |R.S.|F|ESC BA|3|4|0| |
+| P15 |L.P.|M|LAW PhD|1|3|0| |
+| P16 |S.O.|M|SV BA|1|4|0| |
+| P17 |A.B.|M|WORK|-|4|0| |
 | P18 | | | | | | | |
 | P19 | | | | | | | |
 | P20 | | | | | | | |
