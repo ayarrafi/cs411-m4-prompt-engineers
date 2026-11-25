@@ -48,7 +48,7 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 | P07 |K.|?|?|?|?|?| |
 | P08 | | | | | | | |
 | P09 | | | | | | | |
-| P10 |E.D.|M|HEC BA|1|1|0| |
+| P10 | | | | | | | |
 | P11 |M.Z.|M|HEC BA|3|4|0| |
 | P12 |M.R.|M|EPFL-CS BA|2|4|2| |
 | P13 |J.M.|M|HEC BA|3|3|0| |
@@ -58,7 +58,7 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 | P17 |A.B.|M|WORK|-|4|0| |
 | P18 | | | | | | | |
 | P19 | | | | | | | |
-| P20 | | | | | | | |
+| P20 |E. D.|M|HEC BA|1|1|0| |
 
 
 ## General notes
