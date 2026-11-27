@@ -37,28 +37,28 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 - **Derivatives background:** relevant course completed or currently taking.
 - **Gradient descent experience:** never encountered / heard of / studied theoretically / implemented or used.
 
-| ID | Initials | Sex | Degree / field | Year / semester | Derivatives experience (0-5) | Gradient descent experience (0-5) | Additional notes |
+| ID | Initials | Sex | Degree / field | Year / semester | Derivatives experience (0-5) | Gradient descent experience (0-5) | Completed (Yes/No) |
 |---|---|---|---|---|---|---|---|
-| P01 |P. K.|M|WORK|-|3|0| |
-| P02 |B.|M|EPFL-MATH MA|1|5|2| |
-| P03 |N.C.|M|HEC MA|1|3|0| |
-| P04 |A. D.|F|EPFL-CE BA|3|5|?| |
-| P05 |F. P.|M|HEC BA|3|5|?| |
-| P06 |C. B.|M|MICRO MA|2|5|3| |
-| P07 |K.|?|?|?|?|?| |
+| P01 |P. K.|M|WORK|-|3|0|No|
+| P02 |B.|M|EPFL-MATH MA|1|5|2|No|
+| P03 |N.C.|M|HEC MA|1|3|0|No|
+| P04 |A. D.|F|EPFL-CE BA|3|5|?|No|
+| P05 |F. P.|M|HEC BA|3|5|?|No|
+| P06 |C. B.|M|MICRO MA|2|5|3|No|
+| P07 |K.|?|?|?|?|?|No|
 | P08 | | | | | | | |
 | P09 | | | | | | | |
 | P10 | | | | | | | |
-| P11 |M.Z.|M|HEC BA|3|4|0| |
-| P12 |M.R.|M|EPFL-CS BA|2|4|2| |
-| P13 |J.M.|M|HEC BA|3|3|0| |
-| P14 |R.S.|F|ESC BA|3|4|0| |
-| P15 |L.P.|M|LAW PhD|1|3|0| |
-| P16 |S.O.|M|SV BA|1|4|0| |
-| P17 |A.B.|M|WORK|-|4|0| |
+| P11 |M.Z.|M|HEC BA|3|4|0|Yes|
+| P12 |M.R.|M|EPFL-CS BA|2|4|2|No|
+| P13 |J.M.|M|HEC BA|3|3|0|No|
+| P14 |R.S.|F|ESC BA|3|4|0|No|
+| P15 |L.P.|M|LAW PhD|1|3|0|No|
+| P16 |S.O.|M|SV BA|1|4|0|No|
+| P17 |A.B.|M|WORK|-|4|0|No|
 | P18 | | | | | | | |
 | P19 | | | | | | | |
-| P20 |E. D.|M|HEC BA|1|1|0| |
+| P20 |E. D.|M|HEC BA|1|1|0|No|
 
 
 ## General notes
