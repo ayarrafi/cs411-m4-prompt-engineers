@@ -46,7 +46,7 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 | P05 |F. P.|M|UNIL HEC BA|3|5|?|No|
 | P06 |C. B.|M|EPFL MICRO MA|2|5|3|No|
 | P07 |K.|?|?|?|?|?|No|
-| P08 | | | | | | | |
+| P08 |M. S.|M|EPFL SV BA|2|5|0|No|
 | P09 | | | | | | | |
 | P10 | | | | | | | |
 | P11 |M.Z.|M|UNIL HEC BA|3|4|0|Yes|
