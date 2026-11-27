@@ -40,27 +40,27 @@ Record self-reported information using participant IDs. Leave unknown fields bla
 | ID | Initials | Sex | Degree / field | Year / semester | Derivatives experience (0-5) | Gradient descent experience (0-5) | Completed (Yes/No) |
 |---|---|---|---|---|---|---|---|
 | P01 |P. K.|M|WORK|-|3|0|No|
-| P02 |B.|M|EPFL-MATH MA|1|5|2|No|
-| P03 |N.C.|M|HEC MA|1|3|0|No|
-| P04 |A. D.|F|EPFL-CE BA|3|5|?|No|
-| P05 |F. P.|M|HEC BA|3|5|?|No|
-| P06 |C. B.|M|MICRO MA|2|5|3|No|
+| P02 |B.|M|EPFL MATH MA|1|5|2|No|
+| P03 |N.C.|M|UNIL HEC MA|1|3|0|No|
+| P04 |A. D.|F|EPFL CE BA|3|5|?|No|
+| P05 |F. P.|M|UNIL HEC BA|3|5|?|No|
+| P06 |C. B.|M|EPFL MICRO MA|2|5|3|No|
 | P07 |K.|?|?|?|?|?|No|
 | P08 | | | | | | | |
 | P09 | | | | | | | |
 | P10 | | | | | | | |
-| P11 |M.Z.|M|HEC BA|3|4|0|Yes|
-| P12 |M.R.|M|EPFL-CS BA|2|4|2|No|
-| P13 |J.M.|M|HEC BA|3|3|0|No|
-| P14 |R.S.|F|ESC BA|3|4|0|No|
-| P15 |L.P.|M|LAW PhD|1|3|0|No|
-| P16 |S.O.|M|SV BA|1|4|0|No|
+| P11 |M.Z.|M|UNIL HEC BA|3|4|0|Yes|
+| P12 |M.R.|M|EPFL CS BA|2|4|2|No|
+| P13 |J.M.|M|UNIL HEC BA|3|3|0|No|
+| P14 |R.S.|F|UNIL ESC BA|3|4|0|No|
+| P15 |L.P.|M|UNIL LAW PhD|1|3|0|No|
+| P16 |S.O.|M|EPFL SV BA|1|4|0|No|
 | P17 |A.B.|M|WORK|-|4|0|No|
 | P18 | | | | | | | |
 | P19 | | | | | | | |
-| P20 |E. D.|M|HEC BA|1|1|0|No|
+| P20 |E. D.|M|UNIL HEC BA|1|1|0|No|
 
 
 ## General notes
 
-- 
+- Confirm the participant ID for M. S. (EPFL SV BA, year/semester 2, derivatives experience 4/5). This entry was also recorded as P01.
